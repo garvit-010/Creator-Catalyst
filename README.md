@@ -1,4 +1,3 @@
-```markdown
 # 🚀 Creator Catalyst
 
 Tired of the content grind? **Creator Catalyst** is your AI-powered co-pilot designed to solve the biggest challenge in the creator economy: content repurposing.  
@@ -45,7 +44,7 @@ As an AI/ML project, Creator Catalyst uses a modern, multi-modal architecture to
 
 ---
 
-## 🔧 本地设置和安装 (Local Setup and Installation)
+## 🔧 Local Setup and Installation
 
 Follow these steps to run **Creator Catalyst** on your local machine:  
 
@@ -56,10 +55,6 @@ Follow these steps to run **Creator Catalyst** on your local machine:
 **Installation Guides:**  
 - Windows: [How to Install FFmpeg on Windows](https://www.geeksforgeeks.org/how-to-install-ffmpeg-on-windows/)  
 - macOS: `brew install ffmpeg`  
-- Linux (Debian/Ubuntu):  
-  ```
-  sudo apt update && sudo apt install ffmpeg
-  ```
 
 ### 2. Clone the Repository
 ```
