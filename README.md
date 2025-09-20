@@ -93,5 +93,4 @@ streamlit run app.py
 ```
 
 👉 Open the "Network URL" provided by Streamlit in your browser to start using **Creator Catalyst**!
-```
 
