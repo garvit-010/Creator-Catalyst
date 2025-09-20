@@ -58,7 +58,7 @@ Follow these steps to run **Creator Catalyst** on your local machine:
 
 ### 2. Clone the Repository
 ```
-git clone [Your Repository URL]
+git clone https://github.com/garvit-010/Creator-Catalyst.git
 cd creator-catalyst
 ```
 
