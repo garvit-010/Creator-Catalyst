@@ -21,12 +21,14 @@ st.set_page_config(
 )
 
 # --- API Keys ---
-load_dotenv('../.env.local')
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
-HF_TOKEN = os.getenv('HF_TOKEN')
-
-if not GOOGLE_API_KEY or not HF_TOKEN:
-    st.error("API keys not found. Please ensure your .env.local file is properly configured.")
+try:
+    # Get API keys from Streamlit secrets
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+    HF_TOKEN = st.secrets["HF_TOKEN"]
+except Exception as e:
+    st.error("Error loading API keys. Please check your .streamlit/secrets.toml file")
+    st.info("For local development, create .streamlit/secrets.toml")
+    st.info("For Streamlit Cloud, add secrets in the dashboard")
     st.stop()
 
 # --- Configure APIs ---
