@@ -10,6 +10,7 @@ import subprocess
 from PIL import Image
 from huggingface_hub import InferenceClient
 from huggingface_hub.utils import HfHubHTTPError
+from pathlib import Path
 from dotenv import load_dotenv
 
 # --- PAGE CONFIG (MUST BE THE FIRST STREAMLIT COMMAND) ---
@@ -21,14 +22,15 @@ st.set_page_config(
 )
 
 # --- API Keys ---
-try:
-    # Get API keys from Streamlit secrets
-    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-    HF_TOKEN = st.secrets["HF_TOKEN"]
-except Exception as e:
-    st.error("Error loading API keys. Please check your .streamlit/secrets.toml file")
-    st.info("For local development, create .streamlit/secrets.toml")
-    st.info("For Streamlit Cloud, add secrets in the dashboard")
+# Load local .env.local from repo root for local development
+env_path = Path(__file__).parent.parent / '.env.local'
+load_dotenv(env_path)
+
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+HF_TOKEN = os.getenv('HF_TOKEN')
+
+if not GOOGLE_API_KEY or not HF_TOKEN:
+    st.error(f"API keys not found. Create a .env.local at: {env_path} with GOOGLE_API_KEY and HF_TOKEN.")
     st.stop()
 
 # --- Configure APIs ---

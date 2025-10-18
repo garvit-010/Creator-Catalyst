@@ -2,6 +2,4 @@
 .env.local
 __pycache__/
 *.pyc
-*.toml
-!pyproject.toml
-.streamlit/
+.streamlit/secrets.toml

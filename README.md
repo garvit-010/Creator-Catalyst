@@ -94,3 +94,35 @@ streamlit run app.py
 
 👉 Open the "Network URL" provided by Streamlit in your browser to start using **Creator Catalyst**!
 
+---
+
+## Local development & run (clone and run locally)
+1. Clone the repo:
+   ```
+   git clone <your-repo-url>
+   cd Creator-Catalyst
+   ```
+
+2. Create a `.env.local` in the project root (do NOT commit this file). Example:
+   ```
+   GOOGLE_API_KEY=your_google_key_here
+   HF_TOKEN=your_huggingface_token_here
+   ```
+
+3. Create a venv and install dependencies:
+   ```
+   python -m venv .venv
+   .venv\Scripts\activate     # Windows
+   source .venv/bin/activate  # macOS / Linux
+   pip install -r CodeBase/requirements.txt
+   ```
+
+4. Run the app:
+   ```
+   streamlit run CodeBase/app.py
+   ```
+
+**Notes:**
+- Keep `.env.local` out of version control.
+- If you previously added Streamlit Cloud secrets, remove them while testing locally.
+
