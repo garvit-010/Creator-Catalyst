@@ -4,8 +4,8 @@ Tired of the content grind? **Creator Catalyst** is your AI-powered co-pilot des
 
 This tool takes a single long-form video and, in minutes, automatically transforms it into a complete suite of ready-to-publish assets, turning one piece of content into a full-blown marketing campaign.
 
-📍 **Hackathon Submission**  
-This project was built for the **AI Demos Hackathon: AI for Content Creators**.
+📍 **Hackathon Winner**  
+This project was jury's pick for the **AI Demos Hackathon: AI for Content Creators**(https://www.linkedin.com/posts/pradipnichite_ai-demos-community-activity-7381660078497497088-Xuhm?utm_source=share&utm_medium=member_desktop&rcm=ACoAAFSO_jUBIMv0FZzJL-pdGOrezAtOwMnSo_A).
 
 ---
 
