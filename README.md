@@ -21,6 +21,13 @@ Creator Catalyst analyzes your video and generates a multi-format content strate
 
 ---
 
+## 📹 Video Tutorial
+
+Watch the complete setup and usage tutorial:  
+[▶️ Creator Catalyst Tutorial](https://drive.google.com/file/d/1A-Wncmv-4AXm1_OfsrznVbruCf92Xb5L/view?usp=sharing)
+
+---
+
 ## 🛠️ Tech Stack & Architecture
 
 As an AI/ML project, Creator Catalyst uses a modern, multi-modal architecture to achieve its results.  
