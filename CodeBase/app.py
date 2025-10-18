@@ -45,10 +45,16 @@ except Exception as e:
 
 def upload_file_with_retries(path, retries=3, delay=5):
     """Uploads a file to the Gemini API with retries for transient network errors."""
+    try:
+        with open(path, 'rb') as f:
+            file_bytes = f.read()
+    except Exception as e:
+        st.error(f"Failed to read file: {e}")
+        return None
+        
     for attempt in range(retries):
         try:
-            # st.info(f"Uploading file (Attempt {attempt + 1}/{retries})...")
-            file = genai.upload_file(path=path)
+            file = genai.upload_file(file_bytes)
             return file
         except ssl.SSLEOFError:
             st.warning(f"Network error during upload. Retrying in {delay} seconds...")
