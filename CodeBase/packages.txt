@@ -1,6 +1,4 @@
-ffmpeg
 python3-dev
 python3-pip
 build-essential
-libjpeg-dev
-zlib1g-dev
+ffmpeg
