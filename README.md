@@ -1,135 +1,117 @@
-# 🚀 Creator Catalyst
+# Creator Catalyst
 
-Tired of the content grind? **Creator Catalyst** is your AI-powered co-pilot designed to solve the biggest challenge in the creator economy: content repurposing.  
+Creator Catalyst is an AI-powered tool designed to solve the primary challenge in the creator economy: content repurposing.
 
-This tool takes a single long-form video and, in minutes, automatically transforms it into a complete suite of ready-to-publish assets, turning one piece of content into a full-blown marketing campaign.
+This application takes a single long-form video and automatically transforms it into a complete suite of ready-to-publish assets. It effectively turns one piece of content into a comprehensive marketing campaign in minutes.
 
-📍 **Hackathon Winner**  
-This project was jury's pick for the [**AI Demos Hackathon: AI for Content Creators**](https://www.linkedin.com/posts/pradipnichite_ai-demos-community-activity-7381660078497497088-Xuhm?utm_source=share&utm_medium=member_desktop&rcm=ACoAAFSO_jUBIMv0FZzJL-pdGOrezAtOwMnSo_A).
+**Hackathon Recognition**
+This project was a jury's pick for the AI Demos Hackathon: AI for Content Creators.
 
 ---
 
-## 🌟Key Features
+## Key Features
 
 Creator Catalyst analyzes your video and generates a multi-format content strategy automatically:
 
-- 🎙️ **Accurate SRT Captions**: Generates a complete, properly formatted `.srt` transcript to make your videos accessible and boost SEO.  
-- ✂️ **Viral Shorts Ideas**: Identifies at least five high-impact moments from your video, providing topics, timestamps, and summaries. You can then clip and download these shorts directly from the app.  
-- 📝 **Full-Length Blog Post**: Writes a well-structured, engaging blog article (300–400 words) based on the video's content, ready for your website.  
-- 📱 **Engaging Social Post**: Crafts a concise and catchy post, complete with hashtags, perfect for sharing on platforms like X (Twitter) or LinkedIn.  
-- 🎨 **Clickable Thumbnails**: Generates three distinct, visually descriptive prompts for thumbnails. You can then generate these images with a single click, optionally providing a reference image to guide the AI's style.  
+* **Accurate SRT Captions**: Generates a complete, properly formatted .srt transcript to make your videos accessible and improve SEO.
+* **Viral Shorts Ideas**: Identifies high-impact moments from your video, providing topics, timestamps, and summaries. You can then clip and download these shorts directly from the application.
+* **Full-Length Blog Post**: Writes a well-structured blog article (300–400 words) based on the video's content, ready for your website.
+* **Social Media Posts**: Crafts concise and engaging posts, complete with hashtags, optimized for platforms like X (Twitter) or LinkedIn.
+* **Thumbnail Generation**: Generates distinct, visually descriptive prompts for thumbnails and allows you to generate the actual images using Stable Diffusion with a single click.
+* **Robust AI Fallback**: Built for reliability. The system prioritizes Google Gemini for analysis but automatically falls back to OpenAI or a local Ollama instance if the primary API is unavailable.
 
 ---
 
-## 📹 Video Tutorial
+## Tech Stack & Architecture
 
-Watch the complete setup and usage tutorial:  
-[▶️ Creator Catalyst Tutorial](https://drive.google.com/file/d/1A-Wncmv-4AXm1_OfsrznVbruCf92Xb5L/view?usp=sharing)
+Creator Catalyst utilizes a modern, multi-modal architecture to achieve its results.
 
----
-
-## 🛠️ Tech Stack & Architecture
-
-As an AI/ML project, Creator Catalyst uses a modern, multi-modal architecture to achieve its results.  
-
-### AI & ML Models
-- **Video Analysis & Text Generation**: Powered by *Google Gemini 2.5 Flash* (`gemini-2.5-flash-preview-05-20`) for high-speed, long-context video analysis and text-based content generation.  
-- **Image Generation**: Built on *Google Gemini 1.5 Pro* (`gemini-1.5-pro-latest`) for high-quality multimodal thumbnail generation.  
+### AI & Machine Learning
+* **Video Analysis**: Google Gemini 2.5 Flash (Primary) for high-speed, long-context video analysis.
+* **Fallback Text Generation**: OpenAI GPT-4 or Ollama (Llama 3) for reliability when the primary provider is offline.
+* **Image Generation**: Stability AI (via Hugging Face) for high-quality thumbnail creation.
 
 ### Core Technologies
-- **Framework**: Streamlit for the interactive, web-based user interface.  
-- **Video Clipping**: FFMPEG for robust and reliable server-side video processing.  
-- **Language**: Python 3.9+  
+* **Interface**: Streamlit for the interactive web-based UI.
+* **Processing**: FFmpeg for server-side video clipping and manipulation.
+* **Language**: Python 3.9+
 
 ---
 
-## ⚙️ How It Works
+## Installation and Setup
 
-1. **Upload**: Navigate to the "Creator Tool" and upload your long-form video file.  
-2. **Analyze**: Click a single button to launch the AI agent. The app uploads your video and sends it to Gemini for a comprehensive analysis.  
-3. **Create**: Explore the generated content in organized tabs. Download your captions, clip your favorite shorts, and generate thumbnails instantly.  
-
----
-
-## 🔧 Local Setup and Installation
-
-Follow these steps to run **Creator Catalyst** on your local machine:  
+Follow these steps to run Creator Catalyst on your local machine.
 
 ### 1. Prerequisites
-- Python 3.9+ installed  
-- FFMPEG installed and accessible in your system's PATH  
-
-**Installation Guides:**  
-- Windows: [How to Install FFmpeg on Windows](https://www.geeksforgeeks.org/how-to-install-ffmpeg-on-windows/)  
-- macOS: `brew install ffmpeg`  
+* Python 3.9 or higher installed.
+* FFmpeg installed and accessible in your system's PATH.
 
 ### 2. Clone the Repository
-```
+```bash
 git clone https://github.com/garvit-010/Creator-Catalyst.git
 cd creator-catalyst
+
 ```
 
-### 3. Set Up a Virtual Environment
-```
+### 3. Set Up a Virtual Environment (Recommended)
+
+It is highly recommended to use a virtual environment to manage dependencies.
+```bash
+
 # Create the environment
 python -m venv venv
 
-# Activate it
+# Activate the environment
 # On Windows:
 venv\Scripts\activate
 # On macOS/Linux:
 source venv/bin/activate
+
 ```
 
 ### 4. Install Dependencies
-```
-pip install -r requirements.txt
+
+```bash
+pip install -r CodeBase/requirements.txt
+
 ```
 
-### 5. Add API Keys
-- Create a new file in the root directory named `.env`  
-- Copy the contents of `.env.example` into your new `.env` file  
-- Add your secret keys:
-```
-GOOGLE_API_KEY="AIzaSy..."
+### 5. Configure API Keys
+
+Create a file named `.env.local` in the project root directory. You can use the example below as a template:
+
+```properties
+# Primary Provider (Required)
+GOOGLE_API_KEY="your_google_api_key_here"
+
+# Image Generation (Required for Thumbnails)
+HF_TOKEN="your_huggingface_token_here"
+
+# Fallback Providers (Optional but Recommended)
+OPENAI_API_KEY="your_openai_key_here"
+# OR for local Ollama:
+# USE_OLLAMA="true"
+# OLLAMA_BASE_URL="http://localhost:11434/v1"
+
 ```
 
 ### 6. Run the Application
-```
-streamlit run app.py
+
+Use the following command to start the application:
+
+```bash
+python -m streamlit run CodeBase/app.py
+
 ```
 
-👉 Open the "Network URL" provided by Streamlit in your browser to start using **Creator Catalyst**!
+Once running, open the "Network URL" provided in your terminal (usually http://localhost:8501) to start using the tool.
 
 ---
 
-## Local development & run (clone and run locally)
-1. Clone the repo:
-   ```
-   git clone <your-repo-url>
-   cd Creator-Catalyst
-   ```
+## License
 
-2. Create a `.env.local` in the project root (do NOT commit this file). Example:
-   ```
-   GOOGLE_API_KEY=your_google_key_here
-   HF_TOKEN=your_huggingface_token_here
-   ```
+MIT License
 
-3. Create a venv and install dependencies:
-   ```
-   python -m venv .venv
-   .venv\Scripts\activate     # Windows
-   source .venv/bin/activate  # macOS / Linux
-   pip install -r CodeBase/requirements.txt
-   ```
+```
 
-4. Run the app:
-   ```
-   streamlit run CodeBase/app.py
-   ```
-
-**Notes:**
-- Keep `.env.local` out of version control.
-- If you previously added Streamlit Cloud secrets, remove them while testing locally.
-
+```
