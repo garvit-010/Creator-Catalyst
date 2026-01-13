@@ -38,80 +38,106 @@ Creator Catalyst utilizes a modern, multi-modal architecture to achieve its resu
 
 ---
 
-## Installation and Setup
+## Quick Local Deployment 
 
-Follow these steps to run Creator Catalyst on your local machine.
+Get Creator Catalyst running locally with these simple steps:
 
-### 1. Prerequisites
-* Python 3.9 or higher installed.
-* FFmpeg installed and accessible in your system's PATH.
+### Prerequisites Check
 
-### 2. Clone the Repository
+Verify you have everything needed:
+
+```bash
+python --version    # Should show Python 3.9+
+ffmpeg -version     # Should show FFmpeg version
+git --version       # Should show Git version
+```
+#### Step 1: Clone the Repository
+
 ```bash
 git clone https://github.com/garvit-010/Creator-Catalyst.git
-cd creator-catalyst
-
+cd Creator-Catalyst
 ```
 
-### 3. Set Up a Virtual Environment (Recommended)
+#### Step 2: Create Python Environment
 
-It is highly recommended to use a virtual environment to manage dependencies.
 ```bash
-
-# Create the environment
+# Create virtual environment
 python -m venv venv
 
-# Activate the environment
-# On Windows:
+# Activate virtual environment
+# Windows:
 venv\Scripts\activate
-# On macOS/Linux:
+# macOS/Linux:
 source venv/bin/activate
-
 ```
 
-### 4. Install Dependencies
+#### Step 3: Install Dependencies
 
 ```bash
 pip install -r CodeBase/requirements.txt
-
 ```
 
-### 5. Configure API Keys
+#### Step 4: Configure API Keys
 
-Create a file named `.env.local` in the project root directory. You can use the example below as a template:
+Create  .env.local  file in project root (same level as README.md):
+
+```bash
+# If .env.example exists:
+cp CodeBase/.env.example .env.local
+# OR create manually:
+touch .env.local
+```
+
+Edit  .env.local  with your API keys:
 
 ```properties
-# Primary Provider (Required)
+# Required
 GOOGLE_API_KEY="your_google_api_key_here"
-
-# Image Generation (Required for Thumbnails)
 HF_TOKEN="your_huggingface_token_here"
 
-# Fallback Providers (Optional but Recommended)
+# Optional fallbacks
 OPENAI_API_KEY="your_openai_key_here"
 # OR for local Ollama:
 # USE_OLLAMA="true"
 # OLLAMA_BASE_URL="http://localhost:11434/v1"
-
 ```
 
-### 6. Run the Application
-
-Use the following command to start the application:
+Step 5: Launch the Application 
 
 ```bash
-python -m streamlit run CodeBase/app.py
-
+streamlit run CodeBase/app.py
 ```
 
-Once running, open the "Network URL" provided in your terminal (usually http://localhost:8501) to start using the tool.
+✅ Success: Open http://localhost:8501 in your browser!
 
----
+One-Command Setup (Advanced)
+
+```bash
+git clone https://github.com/garvit-010/Creator-Catalyst.git && cd Creator-Catalyst && python -m venv venv && source venv/bin/activate && pip install -r CodeBase/requirements.txt && streamlit run CodeBase/app.py
+```
 
 ## License
 
 MIT License
 
 ```
+Copyright (c) 2025 garvit-010
 
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
