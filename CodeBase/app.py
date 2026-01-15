@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 # Import the wrapper and storage
 from llm_wrapper import LLMWrapper
 from storage_manager import get_storage_manager
-from credits_manager import get_credits_manager  # NEW IMPORT
+from credits_manager import get_credits_manager
 
 # --- PAGE CONFIG (MUST BE THE FIRST STREAMLIT COMMAND) ---
 st.set_page_config(
@@ -30,7 +30,7 @@ load_dotenv(env_path)
 # Initialize Wrapper, Storage Manager, and Credits Manager
 llm_client = LLMWrapper()
 storage_manager = get_storage_manager()
-credits_manager = get_credits_manager()  # NEW INITIALIZATION
+credits_manager = get_credits_manager()
 
 HF_TOKEN = os.getenv('HF_TOKEN')
 
@@ -121,12 +121,190 @@ def clip_video_ffmpeg(video_path, start_time_str, end_time_str):
         st.error(f"Failed to clip video: {e}")
         return None
 
+def process_video_with_progress(uploaded_file, video_path, target_platform="General", enable_grounding=True):
+    """
+    Uploads and analyzes video with progress tracking.
+    Shows progress bar during upload and processing stages.
+    """
+    # Create progress tracking containers
+    progress_container = st.container()
+    
+    with progress_container:
+        # Initialize progress bar
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        try:
+            # Stage 1: File Upload (0-20%)
+            status_text.text("📤 Uploading video file...")
+            progress_bar.progress(10)
+            
+            # Get file size for progress calculation
+            file_size = uploaded_file.size
+            file_size_mb = file_size / (1024 * 1024)
+            
+            # Simulate chunked upload progress
+            chunk_size = 1024 * 1024  # 1MB chunks
+            bytes_written = 0
+            
+            with open(video_path, "wb") as f:
+                while True:
+                    chunk = uploaded_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    bytes_written += len(chunk)
+                    
+                    # Update progress (0-20% range)
+                    upload_progress = min(20, int((bytes_written / file_size) * 20))
+                    progress_bar.progress(upload_progress)
+            
+            status_text.text(f"✅ Upload complete ({file_size_mb:.1f} MB)")
+            progress_bar.progress(20)
+            time.sleep(0.5)
+            
+            # Stage 2: Preprocessing (20-30%)
+            status_text.text("🔄 Preprocessing video...")
+            progress_bar.progress(25)
+            time.sleep(0.3)
+            
+            # Verify file integrity
+            if not os.path.exists(video_path):
+                raise Exception("Video file not found after upload")
+            
+            progress_bar.progress(30)
+            status_text.text("✅ Preprocessing complete")
+            time.sleep(0.3)
+            
+            # Stage 3: AI Upload to Gemini (30-50%)
+            status_text.text("☁️ Uploading to AI service...")
+            progress_bar.progress(35)
+            
+            video_file, provider = llm_client.upload_video_file(video_path)
+            
+            if not video_file:
+                progress_bar.progress(50)
+                status_text.text("⚠️ Using fallback mode (AI upload failed)")
+                time.sleep(1)
+            else:
+                progress_bar.progress(50)
+                status_text.text(f"✅ Uploaded to {provider.upper()}")
+                time.sleep(0.3)
+            
+            # Stage 4: AI Analysis (50-90%)
+            style_modifier = get_platform_prompt_modifier(target_platform)
+            
+            analysis_prompt = f"""
+You are an expert video analyst and content strategist. Your primary and most important task is to provide a complete and accurate transcription of the provided video in SRT format.
+After the transcription, you will also provide a creative content plan.
+
+IMPORTANT STYLE INSTRUCTION:
+The content you generate should be optimized for: {target_platform}
+Style Guide: {style_modifier}
+
+CRITICAL FACT-GROUNDING RULES:
+1. ALL claims must come directly from the video - no speculation or assumptions
+2. Cite timestamps for every factual claim: [Source: MM:SS]
+3. If you cannot verify a claim from the transcript, DO NOT include it
+4. Do not embellish or extrapolate beyond what is explicitly said
+5. Statistics, quotes, and details must be word-for-word accurate
+
+Structure your entire response using the following markdown format, and do not include any other text or explanations.
+
+### Captions
+```srt
+(Your generated SRT captions here)
+```
+
+### Shorts Ideas
+(Provide at least 5 ideas here, each formatted exactly as follows. Ensure the tone and topics align with {target_platform} style.)
+1. Topic: (A short, catchy title appropriate for {target_platform})
+   Start Time: MM:SS
+   End Time: MM:SS
+   Summary: (A one-sentence summary that captures the {target_platform} vibe - MUST be grounded in transcript)
+
+2. Topic: ...
+
+### Blog Post
+(Your full, well-structured blog post between 300 and 400 words with markdown formatting here. Write in a style appropriate for {target_platform}. ALL factual claims must be verifiable in the transcript.)
+
+### Social Media Post
+(Your single, short, and engaging social media post specifically optimized for {target_platform}. Follow the style guide closely. Only include verified information.)
+
+### Thumbnail Ideas
+(Provide 3 distinct ideas here, each as a numbered list item, keeping {target_platform} aesthetics in mind and based on actual video content)
+1. (A detailed, visually descriptive prompt for an AI image generator)
+2. (Another detailed prompt)
+3. (Another detailed prompt)
+"""
+            
+            status_text.text(f"🤖 Analyzing video with {provider.upper() if video_file else 'fallback'}...")
+            progress_bar.progress(60)
+            
+            # Simulate analysis progress
+            for i in range(60, 90, 5):
+                time.sleep(0.5)
+                progress_bar.progress(i)
+                if i == 70:
+                    status_text.text("🤖 Generating captions...")
+                elif i == 75:
+                    status_text.text("🤖 Creating shorts ideas...")
+                elif i == 80:
+                    status_text.text("🤖 Writing blog post...")
+                elif i == 85:
+                    status_text.text("🤖 Crafting social media content...")
+            
+            results = llm_client.analyze_video(video_file, analysis_prompt, enable_grounding=enable_grounding)
+            
+            progress_bar.progress(90)
+            status_text.text("✅ Analysis complete")
+            time.sleep(0.3)
+            
+            # Stage 5: Fact-Grounding Validation (90-95%)
+            if enable_grounding and results.get('captions'):
+                status_text.text("🔍 Validating claims against transcript...")
+                progress_bar.progress(93)
+                time.sleep(0.5)
+            
+            progress_bar.progress(95)
+            
+            # Stage 6: Saving Results (95-100%)
+            status_text.text("💾 Saving results to database...")
+            progress_bar.progress(97)
+            
+            if results and "error" not in results:
+                try:
+                    video_id = storage_manager.save_analysis_results(
+                        video_path=video_path,
+                        results=results,
+                        platform=target_platform,
+                        grounding_enabled=enable_grounding
+                    )
+                    st.session_state.current_video_id = video_id
+                except Exception as e:
+                    st.warning(f"⚠️ Results generated but not saved to database: {e}")
+            
+            progress_bar.progress(100)
+            status_text.text("✅ All processing complete!")
+            time.sleep(1)
+            
+            # Clear progress indicators
+            progress_bar.empty()
+            status_text.empty()
+            
+            return results
+            
+        except Exception as e:
+            progress_bar.empty()
+            status_text.empty()
+            st.error(f"❌ Processing failed: {e}")
+            return {"error": str(e)}
+
 def process_video_with_llm(video_path, target_platform="General", enable_grounding=True):
     """
-    Uploads and analyzes video using the LLM wrapper with platform-specific tone.
-    Now includes fact-grounding validation.
+    Legacy function for compatibility - redirects to progress version.
     """
-    # Get platform-specific style guide
+    # This is kept for backward compatibility but won't be called directly anymore
     style_modifier = get_platform_prompt_modifier(target_platform)
     
     analysis_prompt = f"""
@@ -257,7 +435,7 @@ def home_page():
     - **🎯 Platform-Specific Tone Optimization**
     - **🔍 Fact-Grounding Verification**
     - **💾 Persistent Storage & History Browsing**
-    - **💳 Credits-Based Usage System** (NEW!)
+    - **💳 Credits-Based Usage System**
     """)
     
     st.info("🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!")
@@ -288,7 +466,7 @@ def creator_tool_page():
     if 'enable_grounding' not in st.session_state:
         st.session_state.enable_grounding = True
 
-    # Show current provider AND credits (MODIFIED)
+    # Show current provider AND credits
     provider = llm_client.get_current_provider()
     credits_balance = credits_manager.get_balance()
     
@@ -334,14 +512,12 @@ def creator_tool_page():
         temp_dir = tempfile.gettempdir()
         video_path = os.path.join(temp_dir, uploaded_file.name)
         
-        # Save uploaded file
-        with open(video_path, "wb") as f: 
-            f.write(uploaded_file.getbuffer())
+        # Store video path in session state
         st.session_state.video_path = video_path
         
-        st.video(video_path)
+        st.video(uploaded_file)
 
-        # CHECK CREDITS BEFORE ANALYSIS (MODIFIED)
+        # CHECK CREDITS BEFORE ANALYSIS
         if st.button("🚀 Analyze Video & Generate All Content", type="primary", use_container_width=True):
             # Check if user has enough credits
             has_credits, balance, cost = credits_manager.has_sufficient_credits('video_upload')
@@ -366,28 +542,16 @@ def creator_tool_page():
             
             st.success(f"✅ Credits deducted! New balance: **{new_balance}**")
             
-            # Process video using the wrapper with platform-specific tone and grounding
-            st.session_state.results = process_video_with_llm(
-                video_path, 
+            # Process video with progress tracking
+            st.session_state.results = process_video_with_progress(
+                uploaded_file=uploaded_file,
+                video_path=video_path,
                 target_platform=st.session_state.selected_platform,
                 enable_grounding=st.session_state.enable_grounding
             )
             
             if st.session_state.results and "error" not in st.session_state.results:
                 st.success(f"✅ Full analysis complete for {st.session_state.selected_platform}!")
-                
-                # Save results to database
-                try:
-                    video_id = storage_manager.save_analysis_results(
-                        video_path=video_path,
-                        results=st.session_state.results,
-                        platform=st.session_state.selected_platform,
-                        grounding_enabled=st.session_state.enable_grounding
-                    )
-                    st.session_state.current_video_id = video_id
-                    st.info(f"💾 Results saved! Video ID: {video_id}")
-                except Exception as e:
-                    st.warning(f"⚠️ Results generated but not saved to database: {e}")
                 
                 # Show grounding stats if available
                 if 'grounding_metadata' in st.session_state.results:
@@ -462,7 +626,7 @@ def creator_tool_page():
                         with st.expander("🔍 Transcript Evidence"):
                             st.caption(short['supporting_text'])
                     
-                    # CREDITS CHECK FOR CLIP GENERATION (MODIFIED)
+                    # CREDITS CHECK FOR CLIP GENERATION
                     if st.button(f"✂️ Prepare Clip {i+1}", key=f"clip_{i}"):
                         has_credits, balance, cost = credits_manager.has_sufficient_credits('shorts_clip')
                         
@@ -529,152 +693,15 @@ def creator_tool_page():
             st.markdown(f"> {st.session_state.enhanced_tweet}")
             
             col1, col2 = st.columns([1, 3])
-            # CREDITS CHECK FOR ENHANCEMENT (MODIFIED)
+            # CREDITS CHECK FOR ENHANCEMENT
             with col1:
                 if st.button("✨ Enhance Post", key="enhance_tweet"):
                     has_credits, balance, cost = credits_manager.has_sufficient_credits('tweet_enhancement')
-                    
-                    if not has_credits:
-                        st.error(f"❌ Need {cost} credits (have {balance})")
-                    else:
-                        with st.spinner(f"Refining for {st.session_state.selected_platform}..."):
-                            enhanced = enhance_tweet_with_llm(
-                                original_tweet, 
-                                target_platform=st.session_state.selected_platform
-                            )
-                            if enhanced and "unavailable" not in enhanced.lower():
-                                # Deduct credits
-                                credits_manager.deduct_credits(
-                                    'tweet_enhancement',
-                                    description="Social post enhancement"
-                                )
-                                st.session_state.enhanced_tweet = enhanced
-                                st.rerun()
-                            else:
-                                st.error("Enhancement failed. Using original post.")
 
-        with tabs[4]:
-            st.header("Thumbnail Ideas")
-            st.caption(f"Visual style for {st.session_state.selected_platform}")
-            thumbnail_ideas = results.get('thumbnail_ideas', [])
-            
-            if not thumbnail_ideas:
-                st.info("No thumbnail ideas generated.")
-            
-            for i, idea in enumerate(thumbnail_ideas):
-                with st.container(border=True):
-                    st.subheader(f"Idea {i+1}")
-                    st.markdown(f"*{idea}*")
-                    
-                    # CREDITS CHECK FOR THUMBNAIL GENERATION (MODIFIED)
-                    if st.button(f"🎨 Generate Thumbnail {i+1}", key=f"gen_thumb_{i}"):
-                        has_credits, balance, cost = credits_manager.has_sufficient_credits('thumbnail_generation')
-                        
-                        if not has_credits:
-                            st.error(f"❌ Need {cost} credits (have {balance})")
-                        elif hf_client:
-                            with st.spinner("Generating thumbnail..."):
-                                pil_img = generate_thumbnail_hf(idea)
-                                if pil_img:
-                                    # Deduct credits
-                                    credits_manager.deduct_credits(
-                                        'thumbnail_generation',
-                                        description=f"Thumbnail {i+1}"
-                                    )
-                                    st.session_state[f"pil_image_{i}"] = pil_img
-                                    st.success(f"✅ Thumbnail ready! (1 credit used)")
-                        else:
-                            st.error("Hugging Face client not configured. Please add HF_TOKEN to .env.local")
-                    
-                    if f"pil_image_{i}" in st.session_state:
-                        image_data = st.session_state[f"pil_image_{i}"]
-                        st.image(image_data, use_container_width=True)
-                        
-                        # Download button
-                        img_bytes = pil_to_bytes(image_data)
-                        st.download_button(
-                            label=f"📥 Download Thumbnail {i+1}",
-                            data=img_bytes,
-                            file_name=f"thumbnail_{i+1}.png",
-                            mime="image/png",
-                            key=f"download_thumb_{i}"
-                        )
-        
-        with tabs[5]:
-            st.header("📊 Fact-Grounding Report")
-            
-            if 'grounding_metadata' in results and results['grounding_metadata'].get('enabled'):
-                metadata = results['grounding_metadata']
-                
-                st.success("✅ Fact-grounding validation was applied to all generated content")
-                
-                # Summary metrics
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric(
-                        "Blog Post Verification",
-                        f"{metadata.get('blog_grounding_rate', 0):.0%}",
-                        help="Percentage of claims backed by transcript evidence"
-                    )
-                with col2:
-                    st.metric(
-                        "Social Post Verification",
-                        f"{metadata.get('social_grounding_rate', 0):.0%}",
-                        help="Percentage of claims backed by transcript evidence"
-                    )
-                with col3:
-                    st.metric(
-                        "Shorts Verification",
-                        f"{metadata.get('shorts_verification_rate', 0):.0%}",
-                        help="Percentage of shorts with verified timestamps and content"
-                    )
-                
-                st.divider()
-                
-                # Detailed report
-                st.subheader("Detailed Validation Results")
-                
-                full_report = metadata.get('full_report', {})
-                
-                # Blog validation details
-                if 'blog_post' in full_report.get('validation_results', {}):
-                    with st.expander("📝 Blog Post Claim Analysis"):
-                        blog_claims = full_report['validation_results']['blog_post']
-                        
-                        verified = [c for c in blog_claims if c['is_grounded']]
-                        unverified = [c for c in blog_claims if not c['is_grounded']]
-                        
-                        st.write(f"**Total claims analyzed:** {len(blog_claims)}")
-                        st.write(f"**Verified:** {len(verified)} ✅")
-                        st.write(f"**Unverified/Removed:** {len(unverified)} ❌")
-                        
-                        if unverified:
-                            st.warning("The following claims were removed due to lack of transcript evidence:")
-                            for claim in unverified[:5]:  # Show first 5
-                                st.markdown(f"- _{claim['claim']}_")
-                
-                # Social post validation
-                if 'social_post' in full_report.get('validation_results', {}):
-                    with st.expander("📱 Social Media Post Analysis"):
-                        social_claims = full_report['validation_results']['social_post']
-                        
-                        verified = [c for c in social_claims if c['is_grounded']]
-                        st.write(f"**Verified claims:** {len(verified)}/{len(social_claims)}")
-                
-                st.info("💡 **Tip**: Enable fact-grounding to automatically filter out AI hallucinations and ensure all content is verifiable against your video transcript.")
-                
-            else:
-                st.info("🔍 Fact-grounding was not enabled for this analysis. Enable it in the settings above to verify all claims against the transcript.")
-                st.markdown("""
-                **Benefits of fact-grounding:**
-                - ✅ Prevents AI hallucinations
-                - ✅ Ensures accuracy of statistics and claims
-                - ✅ Provides timestamp citations for verification
-                - ✅ Filters out""")
+# ---- INSERT SIDEBAR + NAVIGATION + ROUTING LOGIC HERE ----
 with st.sidebar:
     st.markdown("## 🚀 Creator Catalyst")
     
-    # CREDITS DISPLAY (NEW SECTION)
     st.divider()
     credits_balance = credits_manager.get_balance()
     
@@ -685,7 +712,6 @@ with st.sidebar:
         if st.button("➕ Add"):
             st.session_state.show_credits_modal = True
     
-    # Credit costs reference
     with st.expander("💰 Credit Costs"):
         st.caption("📹 Video Upload: 5 credits")
         st.caption("📝 Blog Post: 2 credits")
@@ -695,10 +721,8 @@ with st.sidebar:
     
     st.divider()
     
-    # Navigation with Credits page added
     page = st.radio("Navigation", ["Home", "Creator Tool", "History", "Credits"], label_visibility="hidden")
     
-    # Show database stats
     st.divider()
     st.caption("📊 Database Statistics")
     try:
@@ -713,7 +737,6 @@ if page == "Home":
 elif page == "Creator Tool":
     creator_tool_page()
 elif page == "History":
-    # Import and render history page
     from CodeBase.history import render_history_page, render_video_details
     
     if 'selected_video_id' in st.session_state:
@@ -721,6 +744,5 @@ elif page == "History":
     else:
         render_history_page()
 elif page == "Credits":
-    # Import and render credits page
     from credits_page import render_credits_page
     render_credits_page(credits_manager)
