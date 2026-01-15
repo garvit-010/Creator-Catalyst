@@ -7,6 +7,14 @@ from openai import OpenAI, OpenAIError
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Import fact-grounding system
+try:
+    from fact_grounding import FactGrounder, create_grounding_prompt_modifier
+    GROUNDING_AVAILABLE = True
+except ImportError:
+    GROUNDING_AVAILABLE = False
+    print("⚠️ Fact-grounding module not found. Install fact_grounding.py for validation.")
+
 # Load environment variables
 env_path = Path(__file__).parent.parent / '.env.local'
 load_dotenv(env_path)
@@ -15,6 +23,7 @@ class LLMWrapper:
     """
     Unified interface for LLM providers (Gemini, OpenAI, Ollama) with fallback logic.
     Handles video analysis, text generation, and file uploads with automatic failover.
+    Now includes fact-grounding validation to prevent AI hallucinations.
     """
     def __init__(self):
         # API Keys
@@ -185,29 +194,56 @@ class LLMWrapper:
         print("❌ All AI providers failed")
         return "⚠️ All AI providers are currently unavailable. Please check your API keys and internet connection, or try again later."
 
-    def analyze_video(self, video_file_obj, prompt, retries=3):
+    def analyze_video(self, video_file_obj, prompt, retries=3, enable_grounding=True):
         """
         Analyzes video using Gemini with fallback to mock response.
+        Includes fact-grounding validation if enabled.
         
         Args:
             video_file_obj: Gemini file object (from upload_video_file)
             prompt: Analysis instructions
             retries: Number of retry attempts
+            enable_grounding: Whether to validate claims against transcript
             
-        Returns: dict with parsed content sections
+        Returns: dict with parsed content sections and grounding metadata
         """
         # 1. Try Gemini Video Analysis
         if self.gemini_model and video_file_obj:
             for attempt in range(retries):
                 try:
                     print(f"🤖 Analyzing video with Gemini (attempt {attempt + 1}/{retries})")
+                    
+                    # Add grounding instructions to prompt if enabled
+                    enhanced_prompt = prompt
+                    if enable_grounding and GROUNDING_AVAILABLE:
+                        grounding_instructions = """
+
+FACT-GROUNDING REQUIREMENT:
+- Every factual claim MUST be verifiable in the video transcript
+- Cite timestamps for all statistics, quotes, and specific details
+- Format: "claim here [Source: MM:SS]"
+- DO NOT include information not present in the video
+- If uncertain, omit the claim rather than guess
+"""
+                        enhanced_prompt = prompt + grounding_instructions
+                    
                     response = self.gemini_model.generate_content(
-                        [video_file_obj, prompt],
+                        [video_file_obj, enhanced_prompt],
                         request_options={"timeout": 600}
                     )
                     self.current_provider = "gemini"
                     print(f"   ✅ Analysis complete!")
-                    return self._parse_response(response.text)
+                    
+                    # Parse response
+                    parsed_results = self._parse_response(response.text)
+                    
+                    # Apply fact-grounding validation if enabled
+                    if enable_grounding and GROUNDING_AVAILABLE and parsed_results.get('captions'):
+                        print(f"   🔍 Validating claims against transcript...")
+                        parsed_results = self._apply_fact_grounding(parsed_results)
+                    
+                    return parsed_results
+                    
                 except Exception as e:
                     print(f"   ❌ Analysis attempt {attempt + 1}/{retries} failed: {e}")
                     if attempt < retries - 1:
@@ -292,6 +328,83 @@ class LLMWrapper:
             results['thumbnail_ideas'] = ideas
 
         return results
+
+    def _apply_fact_grounding(self, parsed_results: dict) -> dict:
+        """
+        Apply fact-grounding validation to parsed results.
+        Filters ungrounded claims and adds validation metadata.
+        
+        Args:
+            parsed_results: Dictionary with parsed content sections
+            
+        Returns:
+            Enhanced results with grounding validation
+        """
+        if not GROUNDING_AVAILABLE:
+            return parsed_results
+        
+        try:
+            # Initialize fact grounder with transcript
+            srt_content = parsed_results.get('captions', '')
+            if not srt_content:
+                print("   ⚠️ No transcript available for grounding")
+                return parsed_results
+            
+            grounder = FactGrounder(srt_content)
+            
+            # Generate grounding report
+            grounding_report = grounder.generate_grounding_report(parsed_results)
+            
+            # Replace original content with filtered versions
+            if 'blog_post' in grounding_report['filtered_content']:
+                original_blog = parsed_results.get('blog_post', '')
+                filtered_blog = grounding_report['filtered_content']['blog_post']
+                
+                # Only replace if filtering actually removed content
+                if len(filtered_blog) < len(original_blog) * 0.5:
+                    print(f"   ⚠️ Blog post heavily filtered ({len(filtered_blog)}/{len(original_blog)} chars)")
+                
+                parsed_results['blog_post'] = filtered_blog
+                parsed_results['blog_post_original'] = original_blog
+            
+            if 'social_post' in grounding_report['filtered_content']:
+                parsed_results['social_post'] = grounding_report['filtered_content']['social_post']
+            
+            if 'shorts_ideas' in grounding_report['filtered_content']:
+                validated_shorts = grounding_report['filtered_content']['shorts_ideas']
+                # Add validation badges to shorts
+                for short in validated_shorts:
+                    status = short.get('validation_status', 'unknown')
+                    if status == 'verified':
+                        short['validation_badge'] = '✅ Verified'
+                    elif status == 'unverified_summary':
+                        short['validation_badge'] = '⚠️ Summary needs review'
+                    else:
+                        short['validation_badge'] = '❌ Invalid timestamps'
+                
+                parsed_results['shorts_ideas'] = validated_shorts
+            
+            # Add grounding statistics
+            parsed_results['grounding_metadata'] = {
+                'enabled': True,
+                'blog_grounding_rate': grounding_report['statistics'].get('blog_grounding_rate', 0),
+                'social_grounding_rate': grounding_report['statistics'].get('social_grounding_rate', 0),
+                'shorts_verification_rate': grounding_report['statistics'].get('shorts_verification_rate', 0),
+                'full_report': grounding_report
+            }
+            
+            # Log validation results
+            stats = grounding_report['statistics']
+            print(f"   📊 Grounding Stats:")
+            print(f"      Blog: {stats.get('blog_grounding_rate', 0):.1%} claims verified")
+            print(f"      Social: {stats.get('social_grounding_rate', 0):.1%} claims verified")
+            print(f"      Shorts: {stats.get('shorts_verification_rate', 0):.1%} ideas verified")
+            
+            return parsed_results
+            
+        except Exception as e:
+            print(f"   ⚠️ Fact-grounding validation failed: {e}")
+            return parsed_results
 
     def _generate_mock_analysis(self):
         """Generates a realistic mock response when API is unavailable."""

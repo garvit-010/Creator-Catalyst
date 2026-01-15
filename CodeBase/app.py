@@ -117,10 +117,10 @@ def clip_video_ffmpeg(video_path, start_time_str, end_time_str):
         st.error(f"Failed to clip video: {e}")
         return None
 
-def process_video_with_llm(video_path, target_platform="General"):
+def process_video_with_llm(video_path, target_platform="General", enable_grounding=True):
     """
     Uploads and analyzes video using the LLM wrapper with platform-specific tone.
-    Now fully handles upload, processing, and analysis through the wrapper.
+    Now includes fact-grounding validation.
     """
     # Get platform-specific style guide
     style_modifier = get_platform_prompt_modifier(target_platform)
@@ -132,6 +132,13 @@ After the transcription, you will also provide a creative content plan.
 IMPORTANT STYLE INSTRUCTION:
 The content you generate should be optimized for: {target_platform}
 Style Guide: {style_modifier}
+
+CRITICAL FACT-GROUNDING RULES:
+1. ALL claims must come directly from the video - no speculation or assumptions
+2. Cite timestamps for every factual claim: [Source: MM:SS]
+3. If you cannot verify a claim from the transcript, DO NOT include it
+4. Do not embellish or extrapolate beyond what is explicitly said
+5. Statistics, quotes, and details must be word-for-word accurate
 
 Structure your entire response using the following markdown format, and do not include any other text or explanations.
 
@@ -145,18 +152,18 @@ Structure your entire response using the following markdown format, and do not i
 1. Topic: (A short, catchy title appropriate for {target_platform})
    Start Time: MM:SS
    End Time: MM:SS
-   Summary: (A one-sentence summary that captures the {target_platform} vibe)
+   Summary: (A one-sentence summary that captures the {target_platform} vibe - MUST be grounded in transcript)
 
 2. Topic: ...
 
 ### Blog Post
-(Your full, well-structured blog post between 300 and 400 words with markdown formatting here. Write in a style appropriate for {target_platform}.)
+(Your full, well-structured blog post between 300 and 400 words with markdown formatting here. Write in a style appropriate for {target_platform}. ALL factual claims must be verifiable in the transcript.)
 
 ### Social Media Post
-(Your single, short, and engaging social media post specifically optimized for {target_platform}. Follow the style guide closely.)
+(Your single, short, and engaging social media post specifically optimized for {target_platform}. Follow the style guide closely. Only include verified information.)
 
 ### Thumbnail Ideas
-(Provide 3 distinct ideas here, each as a numbered list item, keeping {target_platform} aesthetics in mind)
+(Provide 3 distinct ideas here, each as a numbered list item, keeping {target_platform} aesthetics in mind and based on actual video content)
 1. (A detailed, visually descriptive prompt for an AI image generator)
 2. (Another detailed prompt)
 3. (Another detailed prompt)
@@ -168,11 +175,11 @@ Structure your entire response using the following markdown format, and do not i
     
     if not video_file:
         st.warning("⚠️ Video upload failed. Generating fallback content...")
-        return llm_client.analyze_video(None, analysis_prompt)
+        return llm_client.analyze_video(None, analysis_prompt, enable_grounding=False)
     
-    # Step 2: Analyze video through wrapper
+    # Step 2: Analyze video through wrapper with grounding
     with st.spinner(f"🤖 Analyzing video with {provider.upper()} for {target_platform}..."):
-        results = llm_client.analyze_video(video_file, analysis_prompt)
+        results = llm_client.analyze_video(video_file, analysis_prompt, enable_grounding=enable_grounding)
     
     return results
 
@@ -184,6 +191,8 @@ def enhance_tweet_with_llm(tweet_text, target_platform="Twitter/X"):
 Enhance the following post to make it more engaging for {target_platform}.
 
 Style Guide: {style_modifier}
+
+IMPORTANT: Only use information already present in the original post. Do not add new claims or facts.
 
 Original post: '{tweet_text}'
 
@@ -241,8 +250,12 @@ def home_page():
     - **✍️ Full-Length Blog Post**
     - **📱 Engaging Social Post**
     - **🎨 Clickable Thumbnail Ideas**
-    - **🎯 Platform-Specific Tone Optimization** (NEW!)
+    - **🎯 Platform-Specific Tone Optimization**
+    - **🔍 Fact-Grounding Verification** (NEW!)
     """)
+    
+    st.info("🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!")
+    
     st.divider()
     
     # Show current AI provider status
@@ -265,19 +278,20 @@ def creator_tool_page():
         st.session_state.enhanced_tweet = ""
     if 'selected_platform' not in st.session_state:
         st.session_state.selected_platform = "General"
+    if 'enable_grounding' not in st.session_state:
+        st.session_state.enable_grounding = True
 
     # Show current provider
     provider = llm_client.get_current_provider()
     if provider != "none":
         st.info(f"🤖 Current AI Provider: **{provider.upper()}**")
 
-    # Platform Selection - Prominent placement
-    st.subheader("🎯 Select Target Platform")
-    col1, col2 = st.columns([2, 3])
+    # Platform Selection & Fact-Grounding Toggle
+    col1, col2, col3 = st.columns([2, 2, 1])
     
     with col1:
         selected_platform = st.selectbox(
-            "Choose your content's primary platform:",
+            "🎯 Target Platform:",
             options=list(PLATFORM_TONES.keys()),
             index=list(PLATFORM_TONES.keys()).index(st.session_state.selected_platform),
             help="This will adjust the tone and style of all generated content"
@@ -287,6 +301,14 @@ def creator_tool_page():
     with col2:
         platform_info = PLATFORM_TONES[selected_platform]
         st.info(f"**{selected_platform}**: {platform_info['description']}")
+    
+    with col3:
+        enable_grounding = st.checkbox(
+            "🔍 Fact-Grounding",
+            value=st.session_state.enable_grounding,
+            help="Verify all claims against transcript to prevent hallucinations"
+        )
+        st.session_state.enable_grounding = enable_grounding
 
     st.divider()
 
@@ -304,14 +326,29 @@ def creator_tool_page():
         st.video(video_path)
 
         if st.button("🚀 Analyze Video & Generate All Content", type="primary", use_container_width=True):
-            # Process video using the wrapper with platform-specific tone
+            # Process video using the wrapper with platform-specific tone and grounding
             st.session_state.results = process_video_with_llm(
                 video_path, 
-                target_platform=st.session_state.selected_platform
+                target_platform=st.session_state.selected_platform,
+                enable_grounding=st.session_state.enable_grounding
             )
             
             if st.session_state.results and "error" not in st.session_state.results:
                 st.success(f"✅ Full analysis complete for {st.session_state.selected_platform}!")
+                
+                # Show grounding stats if available
+                if 'grounding_metadata' in st.session_state.results:
+                    metadata = st.session_state.results['grounding_metadata']
+                    if metadata.get('enabled'):
+                        st.metric("🔍 Fact-Grounding Active", "Enabled")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Blog Verification", f"{metadata.get('blog_grounding_rate', 0):.0%}")
+                        with col2:
+                            st.metric("Social Verification", f"{metadata.get('social_grounding_rate', 0):.0%}")
+                        with col3:
+                            st.metric("Shorts Verification", f"{metadata.get('shorts_verification_rate', 0):.0%}")
+                        
             elif st.session_state.results.get("captions"):
                 st.warning("⚠️ Using fallback/mock results (primary AI provider unavailable)")
             else:
@@ -321,10 +358,17 @@ def creator_tool_page():
     if st.session_state.results and st.session_state.results.get('captions'):
         results = st.session_state.results
         
-        # Show platform badge
-        st.success(f"📊 Content optimized for: **{st.session_state.selected_platform}**")
+        # Show platform badge and grounding status
+        status_col1, status_col2 = st.columns(2)
+        with status_col1:
+            st.success(f"📊 Content optimized for: **{st.session_state.selected_platform}**")
+        with status_col2:
+            if results.get('grounding_metadata', {}).get('enabled'):
+                st.success("🔍 **Fact-Grounding**: Active")
+            else:
+                st.info("🔍 **Fact-Grounding**: Disabled")
         
-        tabs = st.tabs(["🎧 Captions", "✂️ Shorts Ideas", "📝 Blog Post", "📱 Social Media", "🎨 Thumbnails"])
+        tabs = st.tabs(["🎧 Captions", "✂️ Shorts Ideas", "📝 Blog Post", "📱 Social Media", "🎨 Thumbnails", "📊 Grounding Report"])
 
         with tabs[0]:
             st.header("Captions (SRT)")
@@ -350,9 +394,20 @@ def creator_tool_page():
             
             for i, short in enumerate(shorts):
                 with st.container(border=True):
-                    st.subheader(f"Idea {i+1}: {short.get('topic', 'N/A')}")
+                    # Add validation badge if available
+                    title_col, badge_col = st.columns([4, 1])
+                    with title_col:
+                        st.subheader(f"Idea {i+1}: {short.get('topic', 'N/A')}")
+                    with badge_col:
+                        if 'validation_badge' in short:
+                            st.markdown(f"**{short['validation_badge']}**")
+                    
                     st.markdown(f"**Timestamps:** `{short.get('start_time', 'N/A')} - {short.get('end_time', 'N/A')}`")
                     st.markdown(f"**Summary:** {short.get('summary', 'N/A')}")
+                    
+                    if 'supporting_text' in short:
+                        with st.expander("📝 Transcript Evidence"):
+                            st.caption(short['supporting_text'])
                     
                     if st.button(f"✂️ Prepare Clip {i+1}", key=f"clip_{i}"):
                         if st.session_state.video_path:
@@ -380,7 +435,17 @@ def creator_tool_page():
             st.header("Blog Post")
             st.caption(f"Written in {st.session_state.selected_platform} style")
             blog_content = results.get('blog_post', 'No blog post generated.')
-            st.markdown(blog_content)
+            
+            # Show comparison if grounding filtered content
+            if 'blog_post_original' in results:
+                compare_tab1, compare_tab2 = st.tabs(["✅ Verified Version", "⚠️ Original (Unfiltered)"])
+                with compare_tab1:
+                    st.markdown(blog_content)
+                with compare_tab2:
+                    st.warning("This version may contain unverified claims")
+                    st.markdown(results['blog_post_original'])
+            else:
+                st.markdown(blog_content)
             
             if blog_content != 'No blog post generated.':
                 st.download_button(
@@ -449,6 +514,79 @@ def creator_tool_page():
                             mime="image/png",
                             key=f"download_thumb_{i}"
                         )
+        
+        with tabs[5]:
+            st.header("📊 Fact-Grounding Report")
+            
+            if 'grounding_metadata' in results and results['grounding_metadata'].get('enabled'):
+                metadata = results['grounding_metadata']
+                
+                st.success("✅ Fact-grounding validation was applied to all generated content")
+                
+                # Summary metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric(
+                        "Blog Post Verification",
+                        f"{metadata.get('blog_grounding_rate', 0):.0%}",
+                        help="Percentage of claims backed by transcript evidence"
+                    )
+                with col2:
+                    st.metric(
+                        "Social Post Verification",
+                        f"{metadata.get('social_grounding_rate', 0):.0%}",
+                        help="Percentage of claims backed by transcript evidence"
+                    )
+                with col3:
+                    st.metric(
+                        "Shorts Verification",
+                        f"{metadata.get('shorts_verification_rate', 0):.0%}",
+                        help="Percentage of shorts with verified timestamps and content"
+                    )
+                
+                st.divider()
+                
+                # Detailed report
+                st.subheader("Detailed Validation Results")
+                
+                full_report = metadata.get('full_report', {})
+                
+                # Blog validation details
+                if 'blog_post' in full_report.get('validation_results', {}):
+                    with st.expander("📝 Blog Post Claim Analysis"):
+                        blog_claims = full_report['validation_results']['blog_post']
+                        
+                        verified = [c for c in blog_claims if c['is_grounded']]
+                        unverified = [c for c in blog_claims if not c['is_grounded']]
+                        
+                        st.write(f"**Total claims analyzed:** {len(blog_claims)}")
+                        st.write(f"**Verified:** {len(verified)} ✅")
+                        st.write(f"**Unverified/Removed:** {len(unverified)} ❌")
+                        
+                        if unverified:
+                            st.warning("The following claims were removed due to lack of transcript evidence:")
+                            for claim in unverified[:5]:  # Show first 5
+                                st.markdown(f"- _{claim['claim']}_")
+                
+                # Social post validation
+                if 'social_post' in full_report.get('validation_results', {}):
+                    with st.expander("📱 Social Media Post Analysis"):
+                        social_claims = full_report['validation_results']['social_post']
+                        
+                        verified = [c for c in social_claims if c['is_grounded']]
+                        st.write(f"**Verified claims:** {len(verified)}/{len(social_claims)}")
+                
+                st.info("💡 **Tip**: Enable fact-grounding to automatically filter out AI hallucinations and ensure all content is verifiable against your video transcript.")
+                
+            else:
+                st.info("🔍 Fact-grounding was not enabled for this analysis. Enable it in the settings above to verify all claims against the transcript.")
+                st.markdown("""
+                **Benefits of fact-grounding:**
+                - ✅ Prevents AI hallucinations
+                - ✅ Ensures accuracy of statistics and claims
+                - ✅ Provides timestamp citations for verification
+                - ✅ Filters out speculation and assumptions
+                """)
 
 # --- Main App Router ---
 with st.sidebar:
