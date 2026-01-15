@@ -737,7 +737,7 @@ if page == "Home":
 elif page == "Creator Tool":
     creator_tool_page()
 elif page == "History":
-    from CodeBase.history import render_history_page, render_video_details
+    from history import render_history_page, render_video_details
     
     if 'selected_video_id' in st.session_state:
         render_video_details(storage_manager, st.session_state.selected_video_id)
