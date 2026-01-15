@@ -20,17 +20,17 @@ Creator Catalyst analyzes your video and generates a multi-format content strate
 * **Platform-Optimized Writing**: Generates Blog Posts and Social Media content tailored to specific platform tones (YouTube, LinkedIn, Twitter/X, Instagram, TikTok).
 * **Thumbnail Generation**: Creates detailed prompts and generates actual images using Stable Diffusion.
 
-### 🛡️ Fact-Grounding & Validation (New!)
+### 🛡️ Fact-Grounding & Validation 
 * **Hallucination Prevention**: Automatically verifies every AI-generated claim against the video transcript.
 * **Citation System**: Adds precise timestamps `[Source: MM:SS]` to factual claims.
 * **Verification Reports**: Provides "Grounding Rates" for blogs, social posts, and shorts to ensure accuracy.
 
-### 💾 Persistence & Management (New!)
+### 💾 Persistence & Management
 * **Local Database**: Automatically saves all videos, analysis results, and generated content to a local SQLite database.
 * **History Browser**: View, search, and export past projects via the "History" tab.
 * **JSON Export/Import**: easily backup or transfer analysis results.
 
-### 💳 Credits System (New!)
+### 💳 Credits System 
 * **Usage Tracking**: A built-in virtual economy to manage API usage and simulate a SaaS environment.
 * **Cost Management**: Track spending for video uploads, content generation, and enhancements.
 
