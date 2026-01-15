@@ -10,8 +10,9 @@ from huggingface_hub import InferenceClient
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Import the wrapper
+# Import the wrapper and storage
 from llm_wrapper import LLMWrapper
+from storage_manager import get_storage_manager
 
 # --- PAGE CONFIG (MUST BE THE FIRST STREAMLIT COMMAND) ---
 st.set_page_config(
@@ -25,8 +26,9 @@ st.set_page_config(
 env_path = Path(__file__).parent.parent / '.env.local'
 load_dotenv(env_path)
 
-# Initialize Wrapper (this now handles all LLM configuration)
+# Initialize Wrapper and Storage Manager
 llm_client = LLMWrapper()
+storage_manager = get_storage_manager()
 
 HF_TOKEN = os.getenv('HF_TOKEN')
 
@@ -251,10 +253,12 @@ def home_page():
     - **📱 Engaging Social Post**
     - **🎨 Clickable Thumbnail Ideas**
     - **🎯 Platform-Specific Tone Optimization**
-    - **🔍 Fact-Grounding Verification** (NEW!)
+    - **🔍 Fact-Grounding Verification**
+    - **💾 Persistent Storage & History Browsing** (NEW!)
     """)
     
     st.info("🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!")
+    st.success("💾 **Persistent Storage**: All your videos and content are automatically saved to a local database for easy browsing and reuse!")
     
     st.divider()
     
@@ -335,6 +339,19 @@ def creator_tool_page():
             
             if st.session_state.results and "error" not in st.session_state.results:
                 st.success(f"✅ Full analysis complete for {st.session_state.selected_platform}!")
+                
+                # Save results to database
+                try:
+                    video_id = storage_manager.save_analysis_results(
+                        video_path=video_path,
+                        results=st.session_state.results,
+                        platform=st.session_state.selected_platform,
+                        grounding_enabled=st.session_state.enable_grounding
+                    )
+                    st.session_state.current_video_id = video_id
+                    st.info(f"💾 Results saved! Video ID: {video_id}")
+                except Exception as e:
+                    st.warning(f"⚠️ Results generated but not saved to database: {e}")
                 
                 # Show grounding stats if available
                 if 'grounding_metadata' in st.session_state.results:
@@ -591,9 +608,27 @@ def creator_tool_page():
 # --- Main App Router ---
 with st.sidebar:
     st.markdown("## 🚀 Creator Catalyst")
-    page = st.radio("Navigation", ["Home", "Creator Tool"], label_visibility="hidden")
+    page = st.radio("Navigation", ["Home", "Creator Tool", "History"], label_visibility="hidden")
+    
+    # Show database stats in sidebar
+    st.divider()
+    st.caption("📊 Database Statistics")
+    try:
+        stats = storage_manager.get_statistics()
+        st.caption(f"Videos: {stats['total_videos']}")
+        st.caption(f"Content Pieces: {stats['total_contents']}")
+    except:
+        pass
 
 if page == "Home":
     home_page()
 elif page == "Creator Tool":
     creator_tool_page()
+elif page == "History":
+    # Import and render history page
+    from CodeBase.history import render_history_page, render_video_details
+    
+    if 'selected_video_id' in st.session_state:
+        render_video_details(storage_manager, st.session_state.selected_video_id)
+    else:
+        render_history_page()
