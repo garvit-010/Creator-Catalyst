@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 # Import the wrapper and storage
 from llm_wrapper import LLMWrapper
 from storage_manager import get_storage_manager
+from credits_manager import get_credits_manager  # NEW IMPORT
 
 # --- PAGE CONFIG (MUST BE THE FIRST STREAMLIT COMMAND) ---
 st.set_page_config(
@@ -26,9 +27,10 @@ st.set_page_config(
 env_path = Path(__file__).parent.parent / '.env.local'
 load_dotenv(env_path)
 
-# Initialize Wrapper and Storage Manager
+# Initialize Wrapper, Storage Manager, and Credits Manager
 llm_client = LLMWrapper()
 storage_manager = get_storage_manager()
+credits_manager = get_credits_manager()  # NEW INITIALIZATION
 
 HF_TOKEN = os.getenv('HF_TOKEN')
 
@@ -254,7 +256,8 @@ def home_page():
     - **🎨 Clickable Thumbnail Ideas**
     - **🎯 Platform-Specific Tone Optimization**
     - **🔍 Fact-Grounding Verification**
-    - **💾 Persistent Storage & History Browsing** (NEW!)
+    - **💾 Persistent Storage & History Browsing**
+    - **💳 Credits-Based Usage System** (NEW!)
     """)
     
     st.info("🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!")
@@ -285,10 +288,19 @@ def creator_tool_page():
     if 'enable_grounding' not in st.session_state:
         st.session_state.enable_grounding = True
 
-    # Show current provider
+    # Show current provider AND credits (MODIFIED)
     provider = llm_client.get_current_provider()
-    if provider != "none":
-        st.info(f"🤖 Current AI Provider: **{provider.upper()}**")
+    credits_balance = credits_manager.get_balance()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if provider != "none":
+            st.info(f"🤖 Current AI Provider: **{provider.upper()}**")
+    with col2:
+        if credits_balance < 10:
+            st.warning(f"⚠️ Low Credits: **{credits_balance}** remaining")
+        else:
+            st.success(f"💳 Credits: **{credits_balance}**")
 
     # Platform Selection & Fact-Grounding Toggle
     col1, col2, col3 = st.columns([2, 2, 1])
@@ -329,7 +341,31 @@ def creator_tool_page():
         
         st.video(video_path)
 
+        # CHECK CREDITS BEFORE ANALYSIS (MODIFIED)
         if st.button("🚀 Analyze Video & Generate All Content", type="primary", use_container_width=True):
+            # Check if user has enough credits
+            has_credits, balance, cost = credits_manager.has_sufficient_credits('video_upload')
+            
+            if not has_credits:
+                st.error(f"❌ Insufficient credits! You need {cost} credits but only have {balance}.")
+                st.info("💡 Purchase more credits from the Credits page to continue.")
+                return
+            
+            # Show cost confirmation
+            st.info(f"💳 This operation will cost **{cost} credits**. Current balance: {balance}")
+            
+            # Deduct credits
+            success, new_balance = credits_manager.deduct_credits(
+                'video_upload',
+                description=f"Video analysis: {uploaded_file.name}"
+            )
+            
+            if not success:
+                st.error("❌ Failed to deduct credits. Please try again.")
+                return
+            
+            st.success(f"✅ Credits deducted! New balance: **{new_balance}**")
+            
             # Process video using the wrapper with platform-specific tone and grounding
             st.session_state.results = process_video_with_llm(
                 video_path, 
@@ -423,20 +459,30 @@ def creator_tool_page():
                     st.markdown(f"**Summary:** {short.get('summary', 'N/A')}")
                     
                     if 'supporting_text' in short:
-                        with st.expander("📝 Transcript Evidence"):
+                        with st.expander("🔍 Transcript Evidence"):
                             st.caption(short['supporting_text'])
                     
+                    # CREDITS CHECK FOR CLIP GENERATION (MODIFIED)
                     if st.button(f"✂️ Prepare Clip {i+1}", key=f"clip_{i}"):
-                        if st.session_state.video_path:
+                        has_credits, balance, cost = credits_manager.has_sufficient_credits('shorts_clip')
+                        
+                        if not has_credits:
+                            st.error(f"❌ Need {cost} credits (have {balance})")
+                        elif st.session_state.video_path:
                             with st.spinner("Clipping with ffmpeg..."):
                                 clip_path = clip_video_ffmpeg(
                                     st.session_state.video_path, 
                                     short.get('start_time'), 
                                     short.get('end_time')
                                 )
-                                if clip_path: 
+                                if clip_path:
+                                    # Deduct credits
+                                    credits_manager.deduct_credits(
+                                        'shorts_clip',
+                                        description=f"Shorts clip {i+1}"
+                                    )
                                     st.session_state[f"clip_path_{i}"] = clip_path
-                                    st.success(f"✅ Clip {i+1} ready!")
+                                    st.success(f"✅ Clip {i+1} ready! (1 credit used)")
                     
                     if f"clip_path_{i}" in st.session_state:
                         with open(st.session_state[f"clip_path_{i}"], "rb") as file:
@@ -483,18 +529,29 @@ def creator_tool_page():
             st.markdown(f"> {st.session_state.enhanced_tweet}")
             
             col1, col2 = st.columns([1, 3])
+            # CREDITS CHECK FOR ENHANCEMENT (MODIFIED)
             with col1:
                 if st.button("✨ Enhance Post", key="enhance_tweet"):
-                    with st.spinner(f"Refining for {st.session_state.selected_platform}..."):
-                        enhanced = enhance_tweet_with_llm(
-                            original_tweet, 
-                            target_platform=st.session_state.selected_platform
-                        )
-                        if enhanced and "unavailable" not in enhanced.lower():
-                            st.session_state.enhanced_tweet = enhanced
-                            st.rerun()
-                        else:
-                            st.error("Enhancement failed. Using original post.")
+                    has_credits, balance, cost = credits_manager.has_sufficient_credits('tweet_enhancement')
+                    
+                    if not has_credits:
+                        st.error(f"❌ Need {cost} credits (have {balance})")
+                    else:
+                        with st.spinner(f"Refining for {st.session_state.selected_platform}..."):
+                            enhanced = enhance_tweet_with_llm(
+                                original_tweet, 
+                                target_platform=st.session_state.selected_platform
+                            )
+                            if enhanced and "unavailable" not in enhanced.lower():
+                                # Deduct credits
+                                credits_manager.deduct_credits(
+                                    'tweet_enhancement',
+                                    description="Social post enhancement"
+                                )
+                                st.session_state.enhanced_tweet = enhanced
+                                st.rerun()
+                            else:
+                                st.error("Enhancement failed. Using original post.")
 
         with tabs[4]:
             st.header("Thumbnail Ideas")
@@ -509,12 +566,23 @@ def creator_tool_page():
                     st.subheader(f"Idea {i+1}")
                     st.markdown(f"*{idea}*")
                     
+                    # CREDITS CHECK FOR THUMBNAIL GENERATION (MODIFIED)
                     if st.button(f"🎨 Generate Thumbnail {i+1}", key=f"gen_thumb_{i}"):
-                        if hf_client:
+                        has_credits, balance, cost = credits_manager.has_sufficient_credits('thumbnail_generation')
+                        
+                        if not has_credits:
+                            st.error(f"❌ Need {cost} credits (have {balance})")
+                        elif hf_client:
                             with st.spinner("Generating thumbnail..."):
                                 pil_img = generate_thumbnail_hf(idea)
                                 if pil_img:
+                                    # Deduct credits
+                                    credits_manager.deduct_credits(
+                                        'thumbnail_generation',
+                                        description=f"Thumbnail {i+1}"
+                                    )
                                     st.session_state[f"pil_image_{i}"] = pil_img
+                                    st.success(f"✅ Thumbnail ready! (1 credit used)")
                         else:
                             st.error("Hugging Face client not configured. Please add HF_TOKEN to .env.local")
                     
@@ -602,15 +670,35 @@ def creator_tool_page():
                 - ✅ Prevents AI hallucinations
                 - ✅ Ensures accuracy of statistics and claims
                 - ✅ Provides timestamp citations for verification
-                - ✅ Filters out speculation and assumptions
-                """)
-
-# --- Main App Router ---
+                - ✅ Filters out""")
 with st.sidebar:
     st.markdown("## 🚀 Creator Catalyst")
-    page = st.radio("Navigation", ["Home", "Creator Tool", "History"], label_visibility="hidden")
     
-    # Show database stats in sidebar
+    # CREDITS DISPLAY (NEW SECTION)
+    st.divider()
+    credits_balance = credits_manager.get_balance()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("💳 Credits", credits_balance)
+    with col2:
+        if st.button("➕ Add"):
+            st.session_state.show_credits_modal = True
+    
+    # Credit costs reference
+    with st.expander("💰 Credit Costs"):
+        st.caption("📹 Video Upload: 5 credits")
+        st.caption("📝 Blog Post: 2 credits")
+        st.caption("📱 Social Post: 1 credit")
+        st.caption("✂️ Shorts Clip: 1 credit")
+        st.caption("🎨 Thumbnail: 1 credit")
+    
+    st.divider()
+    
+    # Navigation with Credits page added
+    page = st.radio("Navigation", ["Home", "Creator Tool", "History", "Credits"], label_visibility="hidden")
+    
+    # Show database stats
     st.divider()
     st.caption("📊 Database Statistics")
     try:
@@ -632,3 +720,7 @@ elif page == "History":
         render_video_details(storage_manager, st.session_state.selected_video_id)
     else:
         render_history_page()
+elif page == "Credits":
+    # Import and render credits page
+    from credits_page import render_credits_page
+    render_credits_page(credits_manager)

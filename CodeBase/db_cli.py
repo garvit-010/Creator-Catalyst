@@ -8,7 +8,7 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-
+from credits_manager import get_credits_manager
 from database import get_database, Database
 from storage_manager import get_storage_manager
 
@@ -225,6 +225,71 @@ def cmd_cleanup(args):
         print(f"✅ Cleaned up {len(orphaned)} orphaned videos")
 
 
+def cmd_credits_balance(args):
+    """Show credit balance."""
+    credits = get_credits_manager(args.database)
+    stats = credits.get_user_stats(args.user_id)
+    
+    print("=" * 60)
+    print("CREDIT BALANCE")
+    print("=" * 60)
+    print(f"Current Balance:  {stats['current_balance']} credits")
+    print(f"Total Earned:     {stats['total_earned']} credits")
+    print(f"Total Spent:      {stats['total_spent']} credits")
+    print(f"Last Updated:     {stats['last_updated']}")
+    print("=" * 60)
+
+
+def cmd_credits_add(args):
+    """Add credits to account."""
+    credits = get_credits_manager(args.database)
+    new_balance = credits.add_credits(
+        args.amount,
+        user_id=args.user_id,
+        description=args.description or f"Added {args.amount} credits"
+    )
+    print(f"✅ Added {args.amount} credits. New balance: {new_balance}")
+
+
+def cmd_credits_history(args):
+    """Show credit transaction history."""
+    credits = get_credits_manager(args.database)
+    transactions = credits.get_transaction_history(user_id=args.user_id, limit=args.limit)
+    
+    if not transactions:
+        print("No transactions found.")
+        return
+    
+    print("=" * 100)
+    print("CREDIT TRANSACTION HISTORY")
+    print("=" * 100)
+    print(f"{'Date':<20} {'Type':<8} {'Amount':<8} {'Balance':<10} {'Description':<50}")
+    print("=" * 100)
+    
+    for txn in transactions:
+        created = datetime.fromisoformat(txn['created_at'])
+        txn_type = "+" if txn['type'] == 'credit' else "-"
+        print(f"{created.strftime('%Y-%m-%d %H:%M:%S'):<20} "
+              f"{txn_type}{txn['amount']:<7} "
+              f"{txn['balance_after']:<10} "
+              f"{txn['description'][:48]:<50}")
+    
+    print("=" * 100)
+
+
+def cmd_credits_reset(args):
+    """Reset credits to default amount."""
+    credits = get_credits_manager(args.database)
+    
+    if not args.force:
+        response = input(f"⚠️  Reset credits to {args.amount or 'default'}? (yes/no): ")
+        if response.lower() != 'yes':
+            print("Cancelled.")
+            return
+    
+    credits.reset_credits(user_id=args.user_id, new_balance=args.amount)
+    print(f"✅ Credits reset for user: {args.user_id}")
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -299,6 +364,32 @@ Examples:
     parser_cleanup = subparsers.add_parser('cleanup', help='Clean up orphaned records')
     parser_cleanup.add_argument('-f', '--force', action='store_true', help='Force without confirmation')
     parser_cleanup.set_defaults(func=cmd_cleanup)
+    # ... (keep existing subparsers: init, stats, list, show, export, import, delete, search, recent, cleanup)
+
+    # NEW: credits-balance
+    parser_credits_bal = subparsers.add_parser('credits-balance', help='Show credit balance')
+    parser_credits_bal.add_argument('-u', '--user-id', default='default_user', help='User ID')
+    parser_credits_bal.set_defaults(func=cmd_credits_balance)
+
+    # NEW: credits-add
+    parser_credits_add = subparsers.add_parser('credits-add', help='Add credits')
+    parser_credits_add.add_argument('amount', type=int, help='Amount to add')
+    parser_credits_add.add_argument('-u', '--user-id', default='default_user', help='User ID')
+    parser_credits_add.add_argument('-m', '--description', help='Transaction description')
+    parser_credits_add.set_defaults(func=cmd_credits_add)
+
+    # NEW: credits-history
+    parser_credits_hist = subparsers.add_parser('credits-history', help='Show transaction history')
+    parser_credits_hist.add_argument('-u', '--user-id', default='default_user', help='User ID')
+    parser_credits_hist.add_argument('-l', '--limit', type=int, default=50, help='Limit results')
+    parser_credits_hist.set_defaults(func=cmd_credits_history)
+
+    # NEW: credits-reset
+    parser_credits_reset = subparsers.add_parser('credits-reset', help='Reset credits')
+    parser_credits_reset.add_argument('-u', '--user-id', default='default_user', help='User ID')
+    parser_credits_reset.add_argument('-a', '--amount', type=int, help='Amount to reset to')
+    parser_credits_reset.add_argument('-f', '--force', action='store_true', help='Force without confirmation')
+    parser_credits_reset.set_defaults(func=cmd_credits_reset)
     
     args = parser.parse_args()
     
