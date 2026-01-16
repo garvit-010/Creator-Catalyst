@@ -6,6 +6,7 @@ import google.generativeai as genai
 from openai import OpenAI, OpenAIError
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Import fact-grounding system
 try:
@@ -15,6 +16,14 @@ except ImportError:
     GROUNDING_AVAILABLE = False
     print("⚠️ Fact-grounding module not found. Install fact_grounding.py for validation.")
 
+# Import AI request logger
+try:
+    from ai_request_logger import get_ai_logger
+    LOGGING_AVAILABLE = True
+except ImportError:
+    LOGGING_AVAILABLE = False
+    print("⚠️ AI request logger not found. Logging disabled.")
+
 # Load environment variables
 env_path = Path(__file__).parent.parent / '.env.local'
 load_dotenv(env_path)
@@ -22,8 +31,7 @@ load_dotenv(env_path)
 class LLMWrapper:
     """
     Unified interface for LLM providers (Gemini, OpenAI, Ollama) with fallback logic.
-    Handles video analysis, text generation, and file uploads with automatic failover.
-    Now includes fact-grounding validation to prevent AI hallucinations.
+    Now includes comprehensive request logging and rate limiting.
     """
     def __init__(self):
         # API Keys
@@ -31,6 +39,9 @@ class LLMWrapper:
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
         self.ollama_base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
         self.fallback_enabled = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
+        
+        # Initialize logger
+        self.logger = get_ai_logger() if LOGGING_AVAILABLE else None
         
         # Track which provider is currently active
         self.current_provider = None
@@ -66,7 +77,7 @@ class LLMWrapper:
             try:
                 self.openai_client = OpenAI(
                     base_url=self.ollama_base_url,
-                    api_key='ollama'  # required but unused
+                    api_key='ollama'
                 )
                 self.openai_model = os.getenv('OLLAMA_MODEL', 'llama3.2')
                 if not self.current_provider:
@@ -75,11 +86,59 @@ class LLMWrapper:
             except Exception as e:
                 print(f"❌ Failed to initialize Ollama: {e}")
 
-    def upload_video_file(self, file_path, retries=3, delay=5):
+    def _check_rate_limit(self, user_id: str = "default_user") -> bool:
+        """Check if user is within rate limits."""
+        if not self.logger:
+            return True
+        
+        is_allowed, stats = self.logger.check_rate_limit(
+            user_id=user_id,
+            max_requests_per_hour=100,
+            max_tokens_per_hour=1_000_000
+        )
+        
+        if not is_allowed:
+            print(f"⚠️ Rate limit exceeded for user {user_id}")
+            print(f"   Requests: {stats['requests_used']}/100")
+            print(f"   Tokens: {stats['tokens_used']}/1,000,000")
+        
+        return is_allowed
+
+    def _log_request(
+        self,
+        endpoint: str,
+        provider: str,
+        operation_type: str,
+        tokens_used: int,
+        cost_credits: float,
+        response_time_ms: int,
+        success: bool,
+        error_message: str = None,
+        metadata: dict = None
+    ):
+        """Log AI request if logging is available."""
+        if self.logger:
+            self.logger.log_request(
+                endpoint=endpoint,
+                provider=provider,
+                operation_type=operation_type,
+                tokens_used=tokens_used,
+                cost_credits=cost_credits,
+                response_time_ms=response_time_ms,
+                success=success,
+                error_message=error_message,
+                metadata=metadata or {}
+            )
+
+    def upload_video_file(self, file_path, retries=3, delay=5, user_id="default_user"):
         """
-        Uploads video file to Gemini API with retry logic.
+        Uploads video file to Gemini API with retry logic and logging.
         Returns: (file_object, provider_name) or (None, None) on failure
         """
+        # Check rate limit
+        if not self._check_rate_limit(user_id):
+            return None, None
+        
         if not self.gemini_model:
             print("❌ Gemini not available for video upload")
             return None, None
@@ -88,42 +147,41 @@ class LLMWrapper:
             print("❌ GOOGLE_API_KEY not configured")
             return None, None
         
-        # Check if file exists
         if not os.path.exists(file_path):
             print(f"❌ File not found: {file_path}")
             return None, None
-            
+        
+        file_size_mb = os.path.getsize(file_path) / (1024*1024)
         print(f"📤 Uploading video: {file_path}")
-        print(f"   File size: {os.path.getsize(file_path) / (1024*1024):.2f} MB")
-            
+        print(f"   File size: {file_size_mb:.2f} MB")
+        
+        start_time = time.time()
+        success = False
+        error_msg = None
+        
         for attempt in range(retries):
             try:
-                # Check if the new API is available
+                print(f"   Attempt {attempt + 1}/{retries} - Using genai.upload_file()")
+                
                 if hasattr(genai, 'upload_file'):
-                    # New API (v0.8.0+)
-                    print(f"   Attempt {attempt + 1}/{retries} - Using genai.upload_file()")
                     video_file = genai.upload_file(path=file_path)
                 else:
-                    # Fallback for older versions - use File API directly
-                    print(f"   Attempt {attempt + 1}/{retries} - Using legacy File API")
                     from google.generativeai.types import File
                     with open(file_path, 'rb') as f:
-                        video_file = File.create(
-                            file=f,
-                            mime_type='video/mp4'
-                        )
+                        video_file = File.create(file=f, mime_type='video/mp4')
                 
                 print(f"   ✅ Upload successful! File name: {video_file.name}")
                 
                 # Wait for processing
                 print(f"   ⏳ Waiting for processing...")
-                max_wait = 300  # 5 minutes max
+                max_wait = 300
                 wait_time = 0
                 
                 while video_file.state.name == "PROCESSING":
                     if wait_time >= max_wait:
-                        print(f"   ⚠️ Processing timeout after {max_wait}s")
-                        return None, None
+                        error_msg = f"Processing timeout after {max_wait}s"
+                        print(f"   ⚠️ {error_msg}")
+                        break
                     
                     time.sleep(5)
                     wait_time += 5
@@ -132,41 +190,103 @@ class LLMWrapper:
                 
                 if video_file.state.name == "ACTIVE":
                     print(f"   ✅ Video ready for analysis!")
+                    success = True
+                    
+                    # Log successful upload
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    self._log_request(
+                        endpoint="/upload_video",
+                        provider="gemini",
+                        operation_type="video_upload",
+                        tokens_used=0,  # Upload doesn't consume tokens
+                        cost_credits=0.0,
+                        response_time_ms=elapsed_ms,
+                        success=True,
+                        metadata={
+                            'file_size_mb': file_size_mb,
+                            'processing_time_s': wait_time
+                        }
+                    )
+                    
                     return video_file, "gemini"
                 else:
-                    print(f"   ❌ Processing failed with state: {video_file.state.name}")
+                    error_msg = f"Processing failed with state: {video_file.state.name}"
+                    print(f"   ❌ {error_msg}")
                     
-            except AttributeError as e:
-                print(f"   ❌ API Error: {e}")
-                print(f"   💡 Suggestion: Update google-generativeai package")
-                print(f"      Run: pip install --upgrade google-generativeai")
-                return None, None
-                
             except Exception as e:
+                error_msg = str(e)
                 print(f"   ❌ Upload attempt {attempt + 1}/{retries} failed: {e}")
                 if attempt < retries - 1:
                     print(f"   ⏳ Retrying in {delay} seconds...")
                     time.sleep(delay)
                 else:
                     print(f"   ❌ All upload attempts failed")
-                    
+        
+        # Log failed upload
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        self._log_request(
+            endpoint="/upload_video",
+            provider="gemini",
+            operation_type="video_upload",
+            tokens_used=0,
+            cost_credits=0.0,
+            response_time_ms=elapsed_ms,
+            success=False,
+            error_message=error_msg,
+            metadata={'file_size_mb': file_size_mb}
+        )
+        
         return None, None
 
-    def generate_text(self, prompt, retries=3):
+    def generate_text(self, prompt, retries=3, user_id="default_user"):
         """
         Generates text with fallback: Gemini -> OpenAI/Ollama -> Mock
+        Includes comprehensive logging.
         Returns: str (generated text)
         """
+        # Check rate limit
+        if not self._check_rate_limit(user_id):
+            return "⚠️ Rate limit exceeded. Please try again later."
+        
+        start_time = time.time()
+        success = False
+        error_msg = None
+        tokens_used = 0
+        provider_used = None
+        
+        # Estimate tokens (rough approximation)
+        estimated_tokens = len(prompt.split()) * 1.3
+        
         # 1. Try Gemini
         if self.gemini_model:
             for attempt in range(retries):
                 try:
                     print(f"🤖 Generating text with Gemini (attempt {attempt + 1}/{retries})")
                     response = self.gemini_model.generate_content(prompt)
+                    
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    tokens_used = int(estimated_tokens + len(response.text.split()) * 1.3)
+                    provider_used = "gemini"
+                    success = True
+                    
+                    # Log successful request
+                    self._log_request(
+                        endpoint="/generate_text",
+                        provider=provider_used,
+                        operation_type="text_generation",
+                        tokens_used=tokens_used,
+                        cost_credits=0.0,  # Gemini free tier
+                        response_time_ms=elapsed_ms,
+                        success=True,
+                        metadata={'prompt_length': len(prompt)}
+                    )
+                    
                     self.current_provider = "gemini"
                     print(f"   ✅ Success!")
                     return response.text
+                    
                 except Exception as e:
+                    error_msg = str(e)
                     print(f"   ❌ Gemini failed: {e}")
                     if attempt < retries - 1:
                         time.sleep(2)
@@ -178,42 +298,90 @@ class LLMWrapper:
             try:
                 provider_name = "OpenAI" if self.openai_api_key else "Ollama"
                 print(f"🤖 Generating text with {provider_name}...")
+                
                 response = self.openai_client.chat.completions.create(
                     model=self.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7,
                     max_tokens=4000
                 )
-                self.current_provider = "openai" if self.openai_api_key else "ollama"
+                
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else int(estimated_tokens * 2)
+                provider_used = "openai" if self.openai_api_key else "ollama"
+                success = True
+                
+                # Calculate cost
+                cost_credits = 0.0 if provider_used == "ollama" else 2.0  # Example cost
+                
+                # Log successful request
+                self._log_request(
+                    endpoint="/generate_text",
+                    provider=provider_used,
+                    operation_type="text_generation",
+                    tokens_used=tokens_used,
+                    cost_credits=cost_credits,
+                    response_time_ms=elapsed_ms,
+                    success=True,
+                    metadata={'prompt_length': len(prompt)}
+                )
+                
+                self.current_provider = provider_used
                 print(f"   ✅ Success with {provider_name}!")
                 return response.choices[0].message.content
+                
             except Exception as e:
+                error_msg = str(e)
                 print(f"   ❌ {provider_name} fallback failed: {e}")
 
-        # 3. Final Fallback (Error message)
+        # 3. Log failure
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        self._log_request(
+            endpoint="/generate_text",
+            provider=self.current_provider or "none",
+            operation_type="text_generation",
+            tokens_used=0,
+            cost_credits=0.0,
+            response_time_ms=elapsed_ms,
+            success=False,
+            error_message=error_msg or "All providers failed",
+            metadata={'prompt_length': len(prompt)}
+        )
+        
         print("❌ All AI providers failed")
         return "⚠️ All AI providers are currently unavailable. Please check your API keys and internet connection, or try again later."
 
-    def analyze_video(self, video_file_obj, prompt, retries=3, enable_grounding=True):
+    def analyze_video(self, video_file_obj, prompt, retries=3, enable_grounding=True, user_id="default_user"):
         """
         Analyzes video using Gemini with fallback to mock response.
-        Includes fact-grounding validation if enabled.
-        
-        Args:
-            video_file_obj: Gemini file object (from upload_video_file)
-            prompt: Analysis instructions
-            retries: Number of retry attempts
-            enable_grounding: Whether to validate claims against transcript
-            
-        Returns: dict with parsed content sections and grounding metadata
+        Includes comprehensive logging and rate limiting.
         """
+        # Check rate limit
+        if not self._check_rate_limit(user_id):
+            return {
+                "error": "Rate limit exceeded. Please try again later.",
+                "captions": "",
+                "shorts_ideas": [],
+                "blog_post": "",
+                "social_post": "",
+                "thumbnail_ideas": []
+            }
+        
+        start_time = time.time()
+        success = False
+        error_msg = None
+        tokens_used = 0
+        
+        # Estimate tokens
+        estimated_tokens = len(prompt.split()) * 1.3 + 5000  # Video analysis uses more tokens
+        
         # 1. Try Gemini Video Analysis
         if self.gemini_model and video_file_obj:
             for attempt in range(retries):
                 try:
                     print(f"🤖 Analyzing video with Gemini (attempt {attempt + 1}/{retries})")
                     
-                    # Add grounding instructions to prompt if enabled
+                    # Add grounding instructions if enabled
                     enhanced_prompt = prompt
                     if enable_grounding and GROUNDING_AVAILABLE:
                         grounding_instructions = """
@@ -231,6 +399,26 @@ FACT-GROUNDING REQUIREMENT:
                         [video_file_obj, enhanced_prompt],
                         request_options={"timeout": 600}
                     )
+                    
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    tokens_used = int(estimated_tokens + len(response.text.split()) * 1.3)
+                    success = True
+                    
+                    # Log successful request
+                    self._log_request(
+                        endpoint="/analyze_video",
+                        provider="gemini",
+                        operation_type="video_analysis",
+                        tokens_used=tokens_used,
+                        cost_credits=5.0,  # As per credit system
+                        response_time_ms=elapsed_ms,
+                        success=True,
+                        metadata={
+                            'grounding_enabled': enable_grounding,
+                            'prompt_length': len(prompt)
+                        }
+                    )
+                    
                     self.current_provider = "gemini"
                     print(f"   ✅ Analysis complete!")
                     
@@ -245,16 +433,27 @@ FACT-GROUNDING REQUIREMENT:
                     return parsed_results
                     
                 except Exception as e:
+                    error_msg = str(e)
                     print(f"   ❌ Analysis attempt {attempt + 1}/{retries} failed: {e}")
                     if attempt < retries - 1:
                         time.sleep(5)
                     else:
                         print("   ❌ All analysis attempts failed")
         
-        # 2. OpenAI/Ollama cannot process video directly, so we skip to mock
-        # (Future enhancement: implement frame extraction + image analysis)
+        # 2. Log failure and return mock
+        elapsed_ms = int((time.time() - start_time) * 1000)
+        self._log_request(
+            endpoint="/analyze_video",
+            provider="gemini",
+            operation_type="video_analysis",
+            tokens_used=0,
+            cost_credits=0.0,
+            response_time_ms=elapsed_ms,
+            success=False,
+            error_message=error_msg or "Video analysis requires Gemini API",
+            metadata={'grounding_enabled': enable_grounding}
+        )
         
-        # 3. Mock Fallback (if enabled)
         if self.fallback_enabled:
             print("⚠️ Using mock analysis response (video analysis requires Gemini)")
             return self._generate_mock_analysis()
@@ -277,7 +476,6 @@ FACT-GROUNDING REQUIREMENT:
         if captions_match:
             results['captions'] = captions_match.group(1).strip()
         else:
-            # Fallback pattern without code block
             captions_match = re.search(r"### Captions\s*\n(.*?)(?=\n###|$)", text, re.DOTALL)
             if captions_match:
                 captions_text = captions_match.group(1).strip()
@@ -288,7 +486,6 @@ FACT-GROUNDING REQUIREMENT:
         if shorts_match:
             shorts_text = shorts_match.group(1).strip()
             ideas = []
-            # Split by numbered items (1., 2., etc.)
             for idea_block in re.split(r'\n\s*\d+\.\s*', shorts_text):
                 if not idea_block.strip(): 
                     continue
@@ -330,37 +527,23 @@ FACT-GROUNDING REQUIREMENT:
         return results
 
     def _apply_fact_grounding(self, parsed_results: dict) -> dict:
-        """
-        Apply fact-grounding validation to parsed results.
-        Filters ungrounded claims and adds validation metadata.
-        
-        Args:
-            parsed_results: Dictionary with parsed content sections
-            
-        Returns:
-            Enhanced results with grounding validation
-        """
+        """Apply fact-grounding validation to parsed results."""
         if not GROUNDING_AVAILABLE:
             return parsed_results
         
         try:
-            # Initialize fact grounder with transcript
             srt_content = parsed_results.get('captions', '')
             if not srt_content:
                 print("   ⚠️ No transcript available for grounding")
                 return parsed_results
             
             grounder = FactGrounder(srt_content)
-            
-            # Generate grounding report
             grounding_report = grounder.generate_grounding_report(parsed_results)
             
-            # Replace original content with filtered versions
             if 'blog_post' in grounding_report['filtered_content']:
                 original_blog = parsed_results.get('blog_post', '')
                 filtered_blog = grounding_report['filtered_content']['blog_post']
                 
-                # Only replace if filtering actually removed content
                 if len(filtered_blog) < len(original_blog) * 0.5:
                     print(f"   ⚠️ Blog post heavily filtered ({len(filtered_blog)}/{len(original_blog)} chars)")
                 
@@ -372,7 +555,6 @@ FACT-GROUNDING REQUIREMENT:
             
             if 'shorts_ideas' in grounding_report['filtered_content']:
                 validated_shorts = grounding_report['filtered_content']['shorts_ideas']
-                # Add validation badges to shorts
                 for short in validated_shorts:
                     status = short.get('validation_status', 'unknown')
                     if status == 'verified':
@@ -384,7 +566,6 @@ FACT-GROUNDING REQUIREMENT:
                 
                 parsed_results['shorts_ideas'] = validated_shorts
             
-            # Add grounding statistics
             parsed_results['grounding_metadata'] = {
                 'enabled': True,
                 'blog_grounding_rate': grounding_report['statistics'].get('blog_grounding_rate', 0),
@@ -393,7 +574,6 @@ FACT-GROUNDING REQUIREMENT:
                 'full_report': grounding_report
             }
             
-            # Log validation results
             stats = grounding_report['statistics']
             print(f"   📊 Grounding Stats:")
             print(f"      Blog: {stats.get('blog_grounding_rate', 0):.1%} claims verified")
@@ -431,60 +611,25 @@ Or update google-generativeai package: pip install --upgrade google-generativeai
                     "start_time": "00:10",
                     "end_time": "00:30",
                     "summary": "This mock clip indicates that your Gemini API is not properly configured. Check your API key and package version."
-                },
-                {
-                    "topic": "Package Update Required",
-                    "start_time": "00:45",
-                    "end_time": "01:05",
-                    "summary": "The google-generativeai package needs to be updated to version 0.8.0 or higher to support video uploads."
-                },
-                {
-                    "topic": "Fallback System Active",
-                    "start_time": "01:20",
-                    "end_time": "01:40",
-                    "summary": "This demonstrates the app's fallback mechanism working as designed when the primary AI service is unavailable."
                 }
             ],
             
             "blog_post": """# AI Provider Configuration Required
 
 ## What Happened?
-Your video upload to the Gemini API failed. This is typically caused by one of these issues:
+Your video upload to the Gemini API failed. This is typically caused by configuration issues.
 
-### 1. Outdated Package Version
-The `google-generativeai` package version in your requirements.txt (0.3.2) is too old. The `upload_file()` method was added in version 0.8.0.
-
-**Fix:**
-```bash
-pip install --upgrade google-generativeai
-```
-
-### 2. Missing or Invalid API Key
-Check that your `GOOGLE_API_KEY` is properly set in your `.env.local` file.
-
-**Fix:**
-1. Go to https://makersuite.google.com/app/apikey
-2. Create a new API key
-3. Add it to your `.env.local` file
-
-### 3. Network or API Issues
-Sometimes Google's API experiences temporary outages or rate limiting.
-
-**Fix:** Wait a few minutes and try again.
-
-## Next Steps
+### Next Steps
 1. Update your package: `pip install --upgrade google-generativeai`
 2. Verify your API key is valid
 3. Try uploading your video again
 
 *This is a mock response to help you diagnose the issue.*""",
             
-            "social_post": "🔧 Pro tip: Keep your AI packages updated! Just upgraded google-generativeai and now my video analysis is running smooth. #DevLife #AITools #TechTips 🚀",
+            "social_post": "🔧 Pro tip: Keep your AI packages updated! #DevLife #AITools #TechTips 🚀",
             
             "thumbnail_ideas": [
-                "A frustrated developer looking at a computer screen showing 'API Error', dramatic red lighting, cyberpunk aesthetic",
-                "A giant 'UPDATE' button glowing in neon green with sparkles and confetti around it, minimalist tech background",
-                "Split screen: left side showing old code with bugs, right side showing updated code running smoothly with checkmarks"
+                "A frustrated developer looking at a computer screen showing 'API Error', dramatic red lighting, cyberpunk aesthetic"
             ]
         }
     
