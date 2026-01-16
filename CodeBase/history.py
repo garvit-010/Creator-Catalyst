@@ -225,7 +225,22 @@ def render_video_card(storage, video_dict, expanded=False):
                 st.session_state.selected_video_id = video_dict['id']
                 st.rerun()
             
-            if st.button("📥 Export JSON", key=f"export_{video_dict['id']}", use_container_width=True):
+            if st.button("� Download Toolkit", key=f"toolkit_{video_dict['id']}", use_container_width=True):
+                try:
+                    zip_path = storage.export_video_toolkit_zip(video_dict['id'])
+                    with open(zip_path, 'rb') as f:
+                        st.download_button(
+                            label="📥 Download ZIP",
+                            data=f.read(),
+                            file_name=f"toolkit_video_{video_dict['id']}.zip",
+                            mime="application/zip",
+                            key=f"dl_toolkit_{video_dict['id']}",
+                            use_container_width=True
+                        )
+                except Exception as e:
+                    st.error(f"Export failed: {str(e)}")
+            
+            if st.button("�📥 Export JSON", key=f"export_{video_dict['id']}", use_container_width=True):
                 export_path = f"export_video_{video_dict['id']}.json"
                 storage.export_video_results(video_dict['id'], export_path)
                 st.success(f"Exported to {export_path}")
@@ -278,6 +293,29 @@ def render_video_details(storage, video_id):
     st.markdown(f"**Filename:** `{video['filename']}`")
     st.markdown(f"**Status:** {video['processing_status']}")
     st.markdown(f"**Grounding:** {'✅ Enabled' if video['grounding_enabled'] else '❌ Disabled'}")
+    
+    st.divider()
+    
+    # Download Toolkit Button - Prominent placement
+    col1, col2, col3 = st.columns([2, 2, 2])
+    
+    with col2:
+        # Create ZIP and provide download button
+        try:
+            zip_path = storage.export_video_toolkit_zip(video_id)
+            with open(zip_path, 'rb') as f:
+                zip_data = f.read()
+                st.download_button(
+                    label="📦 Download Toolkit (.zip)",
+                    data=zip_data,
+                    file_name=f"toolkit_{video['filename'].rsplit('.', 1)[0]}.zip",
+                    mime="application/zip",
+                    key=f"toolkit_download_{video_id}",
+                    use_container_width=True,
+                    help="Download all generated assets (captions, blog, social, shorts, thumbnails)"
+                )
+        except Exception as e:
+            st.error(f"Failed to create toolkit: {str(e)}")
     
     st.divider()
     

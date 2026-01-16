@@ -936,6 +936,39 @@ def creator_tool_page():
             else:
                 st.info("🔍 **Fact-Grounding**: Disabled")
 
+        # Download Toolkit Button - Prominent placement
+        st.divider()
+        col1, col2, col3 = st.columns([2, 2, 2])
+        with col2:
+            if st.session_state.get("current_video_id"):
+                try:
+                    zip_path = storage_manager.export_video_toolkit_zip(
+                        st.session_state.current_video_id
+                    )
+                    with open(zip_path, "rb") as f:
+                        zip_data = f.read()
+                        video_name = (
+                            st.session_state.video_path.split(os.sep)[-1].rsplit(
+                                ".", 1
+                            )[0]
+                            if st.session_state.video_path
+                            else "video"
+                        )
+                        st.download_button(
+                            label="📦 Download Toolkit (.zip)",
+                            data=zip_data,
+                            file_name=f"toolkit_{video_name}.zip",
+                            mime="application/zip",
+                            key="toolkit_download_main",
+                            use_container_width=True,
+                            help="Download all generated assets in one ZIP file",
+                        )
+                except Exception as e:
+                    st.error(f"Failed to create toolkit: {str(e)}")
+            else:
+                st.info("💡 Save results to enable toolkit download")
+        st.divider()
+
         tabs = st.tabs(
             [
                 "🎧 Captions",
