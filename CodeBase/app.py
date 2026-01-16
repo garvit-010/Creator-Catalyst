@@ -15,67 +15,70 @@ from dotenv import load_dotenv
 from llm_wrapper import LLMWrapper
 from storage_manager import get_storage_manager
 from credits_manager import get_credits_manager
+from theme_manager import get_theme_manager
 
 
 def render_credits_page(credits_manager):
     """Main credits management page."""
     st.title("💳 Credits Management")
     st.markdown("Manage your credits and view usage history")
-    
+
     # Use the passed credits manager
     credits = credits_manager
-    
+
     # Get user stats
     stats = credits.get_user_stats()
-    
+
     # Display current balance prominently
     st.divider()
-    
+
     col1, col2, col3, col4 = st.columns(4)
-    
+
     with col1:
         st.metric(
-            "Current Balance", 
+            "Current Balance",
             f"{stats['current_balance']} credits",
             delta=None,
-            help="Your available credits for operations"
+            help="Your available credits for operations",
         )
-    
+
     with col2:
         st.metric(
-            "Total Earned", 
+            "Total Earned",
             f"{stats['total_earned']} credits",
-            help="Total credits you've received"
+            help="Total credits you've received",
         )
-    
+
     with col3:
         st.metric(
-            "Total Spent", 
+            "Total Spent",
             f"{stats['total_spent']} credits",
-            help="Total credits you've used"
+            help="Total credits you've used",
         )
-    
+
     with col4:
-        if stats['current_balance'] < 10:
+        if stats["current_balance"] < 10:
             st.error("⚠️ Low Balance")
-        elif stats['current_balance'] < 25:
+        elif stats["current_balance"] < 25:
             st.warning("⚠️ Running Low")
         else:
             st.success("✅ Good Balance")
-    
+
     st.divider()
-    
+
     # Tabs for different views
-    tabs = st.tabs(["💰 Purchase Credits", "📊 Usage Statistics", "📜 Transaction History"])
-    
+    tabs = st.tabs(
+        ["💰 Purchase Credits", "📊 Usage Statistics", "📜 Transaction History"]
+    )
+
     # ========== PURCHASE CREDITS TAB ==========
     with tabs[0]:
         st.subheader("💰 Purchase Credits")
         st.markdown("Select a credit package to purchase:")
-        
+
         # Credit packages
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             with st.container(border=True):
                 st.markdown("### 🥉 Starter")
@@ -85,13 +88,17 @@ def render_credits_page(credits_manager):
                 st.caption("• ~10 video uploads")
                 st.caption("• ~25 blog posts")
                 st.caption("• ~50 social posts")
-                
-                if st.button("Purchase Starter", key="buy_starter", use_container_width=True):
+
+                if st.button(
+                    "Purchase Starter", key="buy_starter", use_container_width=True
+                ):
                     # Simulate purchase (in production, integrate payment gateway)
-                    new_balance = credits.add_credits(50, description="Purchased Starter Package ($9.99)")
+                    new_balance = credits.add_credits(
+                        50, description="Purchased Starter Package ($9.99)"
+                    )
                     st.success(f"✅ Added 50 credits! New balance: {new_balance}")
                     st.rerun()
-        
+
         with col2:
             with st.container(border=True):
                 st.markdown("### 🥈 Pro")
@@ -101,13 +108,20 @@ def render_credits_page(credits_manager):
                 st.caption("• ~30 video uploads")
                 st.caption("• ~75 blog posts")
                 st.caption("• ~150 social posts")
-                
-                if st.button("Purchase Pro", key="buy_pro", use_container_width=True, type="primary"):
-                    new_balance = credits.add_credits(150, description="Purchased Pro Package ($24.99)")
+
+                if st.button(
+                    "Purchase Pro",
+                    key="buy_pro",
+                    use_container_width=True,
+                    type="primary",
+                ):
+                    new_balance = credits.add_credits(
+                        150, description="Purchased Pro Package ($24.99)"
+                    )
                     st.success(f"✅ Added 150 credits! New balance: {new_balance}")
                     st.balloons()
                     st.rerun()
-        
+
         with col3:
             with st.container(border=True):
                 st.markdown("### 🥇 Business")
@@ -117,148 +131,160 @@ def render_credits_page(credits_manager):
                 st.caption("• ~100 video uploads")
                 st.caption("• ~250 blog posts")
                 st.caption("• ~500 social posts")
-                
-                if st.button("Purchase Business", key="buy_business", use_container_width=True):
-                    new_balance = credits.add_credits(500, description="Purchased Business Package ($79.99)")
+
+                if st.button(
+                    "Purchase Business", key="buy_business", use_container_width=True
+                ):
+                    new_balance = credits.add_credits(
+                        500, description="Purchased Business Package ($79.99)"
+                    )
                     st.success(f"✅ Added 500 credits! New balance: {new_balance}")
                     st.balloons()
                     st.rerun()
-        
+
         st.divider()
-        
+
         # Custom amount (for testing/admin)
         with st.expander("🔧 Admin: Add Custom Credits"):
             st.caption("For testing purposes only")
-            
+
             col1, col2 = st.columns([3, 1])
             with col1:
                 custom_amount = st.number_input(
-                    "Amount to add",
-                    min_value=1,
-                    max_value=10000,
-                    value=10,
-                    step=1
+                    "Amount to add", min_value=1, max_value=10000, value=10, step=1
                 )
-            
+
             with col2:
                 if st.button("Add Credits", use_container_width=True):
                     new_balance = credits.add_credits(
                         custom_amount,
-                        description=f"Admin added {custom_amount} credits"
+                        description=f"Admin added {custom_amount} credits",
                     )
                     st.success(f"✅ Added {custom_amount} credits!")
                     st.rerun()
-    
+
     # ========== USAGE STATISTICS TAB ==========
     with tabs[1]:
         st.subheader("📊 Usage Statistics")
-        
-        operation_counts = stats.get('operation_counts', {})
-        
+
+        operation_counts = stats.get("operation_counts", {})
+
         if not operation_counts:
             st.info("No usage data yet. Start creating content to see statistics!")
         else:
             # Display usage by operation type
             st.markdown("### Operations Breakdown")
-            
+
             for operation, data in operation_counts.items():
                 with st.container(border=True):
                     col1, col2, col3 = st.columns([3, 1, 1])
-                    
+
                     with col1:
                         # Format operation name nicely
-                        op_name = operation.replace('_', ' ').title()
+                        op_name = operation.replace("_", " ").title()
                         st.markdown(f"**{op_name}**")
-                    
+
                     with col2:
-                        st.metric("Times Used", data['count'])
-                    
+                        st.metric("Times Used", data["count"])
+
                     with col3:
-                        st.metric("Credits Spent", data['total_cost'])
-            
+                        st.metric("Credits Spent", data["total_cost"])
+
             st.divider()
-            
+
             # Calculate efficiency metrics
             st.markdown("### Efficiency Metrics")
-            
+
             col1, col2 = st.columns(2)
-            
+
             with col1:
-                if stats['total_spent'] > 0:
-                    video_uploads = operation_counts.get('video_upload', {}).get('count', 0)
+                if stats["total_spent"] > 0:
+                    video_uploads = operation_counts.get("video_upload", {}).get(
+                        "count", 0
+                    )
                     if video_uploads > 0:
-                        avg_per_video = stats['total_spent'] / video_uploads
+                        avg_per_video = stats["total_spent"] / video_uploads
                         st.metric(
                             "Avg Credits per Video",
                             f"{avg_per_video:.1f}",
-                            help="Average total credits spent per video uploaded"
+                            help="Average total credits spent per video uploaded",
                         )
-            
+
             with col2:
-                total_operations = sum(data['count'] for data in operation_counts.values())
+                total_operations = sum(
+                    data["count"] for data in operation_counts.values()
+                )
                 if total_operations > 0:
-                    avg_per_operation = stats['total_spent'] / total_operations
+                    avg_per_operation = stats["total_spent"] / total_operations
                     st.metric(
                         "Avg Credits per Operation",
                         f"{avg_per_operation:.1f}",
-                        help="Average credits per individual operation"
+                        help="Average credits per individual operation",
                     )
-    
+
     # ========== TRANSACTION HISTORY TAB ==========
     with tabs[2]:
         st.subheader("📜 Transaction History")
-        
+
         # Get transaction history
         transactions = credits.get_transaction_history(limit=100)
-        
+
         if not transactions:
             st.info("No transactions yet.")
         else:
             st.markdown(f"**Last {len(transactions)} transactions**")
-            
+
             # Display transactions in a nice format
             for txn in transactions:
                 with st.container(border=True):
                     col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
-                    
+
                     with col1:
-                        created = datetime.fromisoformat(txn['created_at'])
-                        st.caption(created.strftime('%Y-%m-%d %H:%M:%S'))
-                    
+                        created = datetime.fromisoformat(txn["created_at"])
+                        st.caption(created.strftime("%Y-%m-%d %H:%M:%S"))
+
                     with col2:
-                        if txn['type'] == 'credit':
+                        if txn["type"] == "credit":
                             st.markdown(f"**➕ +{txn['amount']} credits**")
-                            st.success(txn['description'], icon="✅")
+                            st.success(txn["description"], icon="✅")
                         else:
                             st.markdown(f"**➖ -{txn['amount']} credits**")
-                            st.caption(txn['description'])
-                    
+                            st.caption(txn["description"])
+
                     with col3:
-                        if txn['operation']:
-                            op_name = txn['operation'].replace('_', ' ').title()
+                        if txn["operation"]:
+                            op_name = txn["operation"].replace("_", " ").title()
                             st.caption(f"Operation: {op_name}")
-                    
+
                     with col4:
                         st.metric(
                             "Balance",
-                            txn['balance_after'],
-                            label_visibility="collapsed"
+                            txn["balance_after"],
+                            label_visibility="collapsed",
                         )
-    
+
     st.divider()
-    
+
     # Credit costs reference
     st.markdown("### 💡 Credit Cost Reference")
-    
+
     cost_data = [
-        ("📹 Video Upload", "5 credits", "Full video analysis with captions, blog, social post, shorts, and thumbnails"),
+        (
+            "📹 Video Upload",
+            "5 credits",
+            "Full video analysis with captions, blog, social post, shorts, and thumbnails",
+        ),
         ("📝 Blog Generation", "2 credits", "Individual blog post generation"),
         ("📱 Social Post", "1 credit", "Enhanced social media post"),
         ("✂️ Shorts Clip", "1 credit", "Video clip preparation and export"),
         ("🎨 Thumbnail Generation", "1 credit", "AI-generated thumbnail image"),
-        ("✨ Tweet Enhancement", "1 credit", "Enhanced social post with AI optimization")
+        (
+            "✨ Tweet Enhancement",
+            "1 credit",
+            "Enhanced social post with AI optimization",
+        ),
     ]
-    
+
     for operation, cost, description in cost_data:
         with st.container(border=True):
             col1, col2 = st.columns([4, 1])
@@ -267,16 +293,22 @@ def render_credits_page(credits_manager):
                 st.caption(description)
             with col2:
                 st.markdown(f"**{cost}**")
+
+
 # --- PAGE CONFIG (MUST BE THE FIRST STREAMLIT COMMAND) ---
 st.set_page_config(
     page_title="Creator Catalyst",
     page_icon="🚀",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
+# Initialize and apply theme
+theme_manager = get_theme_manager()
+theme_manager.apply_theme()
+
 # --- API Keys & Config ---
-env_path = Path(__file__).parent.parent / '.env.local'
+env_path = Path(__file__).parent.parent / ".env.local"
 load_dotenv(env_path)
 
 # Initialize Wrapper, Storage Manager, and Credits Manager
@@ -284,11 +316,13 @@ llm_client = LLMWrapper()
 storage_manager = get_storage_manager()
 credits_manager = get_credits_manager()
 
-HF_TOKEN = os.getenv('HF_TOKEN')
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 # --- Configure HF API ---
 try:
-    hf_client = InferenceClient("stabilityai/stable-diffusion-xl-base-1.0", token=HF_TOKEN)
+    hf_client = InferenceClient(
+        "stabilityai/stable-diffusion-xl-base-1.0", token=HF_TOKEN
+    )
 except Exception as e:
     st.error(f"Failed to initialize Hugging Face API: {e}")
     hf_client = None
@@ -297,49 +331,52 @@ except Exception as e:
 PLATFORM_TONES = {
     "General": {
         "description": "Balanced tone suitable for all platforms",
-        "style_guide": "Use a clear, engaging tone that works across multiple platforms. Be informative and accessible."
+        "style_guide": "Use a clear, engaging tone that works across multiple platforms. Be informative and accessible.",
     },
     "YouTube": {
         "description": "Storytelling and engaging narrative style",
-        "style_guide": "Use a conversational, storytelling approach. Build narrative arcs, create anticipation, and maintain viewer engagement. Use phrases like 'let me show you', 'here's the thing', and create emotional connections."
+        "style_guide": "Use a conversational, storytelling approach. Build narrative arcs, create anticipation, and maintain viewer engagement. Use phrases like 'let me show you', 'here's the thing', and create emotional connections.",
     },
     "LinkedIn": {
         "description": "Professional and thought-leadership focused",
-        "style_guide": "Use a professional, authoritative tone. Focus on insights, industry trends, and actionable takeaways. Use business-appropriate language and emphasize value propositions. Avoid casual slang."
+        "style_guide": "Use a professional, authoritative tone. Focus on insights, industry trends, and actionable takeaways. Use business-appropriate language and emphasize value propositions. Avoid casual slang.",
     },
     "Twitter/X": {
         "description": "Punchy, viral-worthy with high energy",
-        "style_guide": "Use short, punchy sentences. Create hype and urgency. Use power words, trending terminology, and emojis strategically. Be bold and attention-grabbing. Focus on hooks and viral potential."
+        "style_guide": "Use short, punchy sentences. Create hype and urgency. Use power words, trending terminology, and emojis strategically. Be bold and attention-grabbing. Focus on hooks and viral potential.",
     },
     "Instagram": {
         "description": "Visual-first, lifestyle-oriented narrative",
-        "style_guide": "Use descriptive, visual language. Focus on aesthetics, lifestyle elements, and emotional appeal. Be inspirational and aspirational. Use casual, friendly tone with strategic emoji use."
+        "style_guide": "Use descriptive, visual language. Focus on aesthetics, lifestyle elements, and emotional appeal. Be inspirational and aspirational. Use casual, friendly tone with strategic emoji use.",
     },
     "TikTok": {
         "description": "Fast-paced, trend-aware, Gen-Z friendly",
-        "style_guide": "Use very short, snappy language. Be extremely casual and relatable. Reference trends, use internet slang appropriately, and create immediate hooks. Focus on entertainment value and quick pacing."
-    }
+        "style_guide": "Use very short, snappy language. Be extremely casual and relatable. Reference trends, use internet slang appropriately, and create immediate hooks. Focus on entertainment value and quick pacing.",
+    },
 }
 
 # --- Helper Functions ---
+
 
 def get_platform_prompt_modifier(platform):
     """Returns the style guide for the selected platform."""
     return PLATFORM_TONES.get(platform, PLATFORM_TONES["General"])["style_guide"]
 
+
 def time_str_to_seconds(time_str):
     """Converts MM:SS or HH:MM:SS string to seconds."""
-    if not time_str: 
+    if not time_str:
         return 0
-    numbers = re.findall(r'\d+', time_str)
+    numbers = re.findall(r"\d+", time_str)
     parts = [int(n) for n in numbers]
-    if len(parts) == 2: 
+    if len(parts) == 2:
         return parts[0] * 60 + parts[1]
-    if len(parts) == 3: 
+    if len(parts) == 3:
         return parts[0] * 3600 + parts[1] * 60 + parts[2]
-    if len(parts) == 1: 
+    if len(parts) == 1:
         return parts[0]
     return 0
+
 
 def clip_video_ffmpeg(video_path, start_time_str, end_time_str):
     """Clips the video using ffmpeg for robustness."""
@@ -347,7 +384,7 @@ def clip_video_ffmpeg(video_path, start_time_str, end_time_str):
         start_seconds = time_str_to_seconds(start_time_str)
         end_seconds = time_str_to_seconds(end_time_str)
         duration = end_seconds - start_seconds
-        
+
         if duration <= 0:
             st.error("Invalid timestamps: End time must be after start time.")
             return None
@@ -356,49 +393,60 @@ def clip_video_ffmpeg(video_path, start_time_str, end_time_str):
             output_path = temp_clip_file.name
 
         cmd = [
-            "ffmpeg", "-y",
-            "-ss", str(start_seconds),
-            "-i", video_path,
-            "-t", str(duration),
-            "-c:v", "libx264",
-            "-c:a", "aac",
-            output_path
+            "ffmpeg",
+            "-y",
+            "-ss",
+            str(start_seconds),
+            "-i",
+            video_path,
+            "-t",
+            str(duration),
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            output_path,
         ]
         subprocess.run(cmd, check=True, capture_output=True)
         return output_path
     except subprocess.CalledProcessError as e:
-        st.error(f"FFmpeg clipping failed. Make sure ffmpeg is installed. Error: {e.stderr.decode()}")
+        st.error(
+            f"FFmpeg clipping failed. Make sure ffmpeg is installed. Error: {e.stderr.decode()}"
+        )
         return None
     except Exception as e:
         st.error(f"Failed to clip video: {e}")
         return None
 
-def process_video_with_progress(uploaded_file, video_path, target_platform="General", enable_grounding=True):
+
+def process_video_with_progress(
+    uploaded_file, video_path, target_platform="General", enable_grounding=True
+):
     """
     Uploads and analyzes video with progress tracking.
     Shows progress bar during upload and processing stages.
     """
     # Create progress tracking containers
     progress_container = st.container()
-    
+
     with progress_container:
         # Initialize progress bar
         progress_bar = st.progress(0)
         status_text = st.empty()
-        
+
         try:
             # Stage 1: File Upload (0-20%)
             status_text.text("📤 Uploading video file...")
             progress_bar.progress(10)
-            
+
             # Get file size for progress calculation
             file_size = uploaded_file.size
             file_size_mb = file_size / (1024 * 1024)
-            
+
             # Simulate chunked upload progress
             chunk_size = 1024 * 1024  # 1MB chunks
             bytes_written = 0
-            
+
             with open(video_path, "wb") as f:
                 while True:
                     chunk = uploaded_file.read(chunk_size)
@@ -406,34 +454,34 @@ def process_video_with_progress(uploaded_file, video_path, target_platform="Gene
                         break
                     f.write(chunk)
                     bytes_written += len(chunk)
-                    
+
                     # Update progress (0-20% range)
                     upload_progress = min(20, int((bytes_written / file_size) * 20))
                     progress_bar.progress(upload_progress)
-            
+
             status_text.text(f"✅ Upload complete ({file_size_mb:.1f} MB)")
             progress_bar.progress(20)
             time.sleep(0.5)
-            
+
             # Stage 2: Preprocessing (20-30%)
             status_text.text("🔄 Preprocessing video...")
             progress_bar.progress(25)
             time.sleep(0.3)
-            
+
             # Verify file integrity
             if not os.path.exists(video_path):
                 raise Exception("Video file not found after upload")
-            
+
             progress_bar.progress(30)
             status_text.text("✅ Preprocessing complete")
             time.sleep(0.3)
-            
+
             # Stage 3: AI Upload to Gemini (30-50%)
             status_text.text("☁️ Uploading to AI service...")
             progress_bar.progress(35)
-            
+
             video_file, provider = llm_client.upload_video_file(video_path)
-            
+
             if not video_file:
                 progress_bar.progress(50)
                 status_text.text("⚠️ Using fallback mode (AI upload failed)")
@@ -442,10 +490,10 @@ def process_video_with_progress(uploaded_file, video_path, target_platform="Gene
                 progress_bar.progress(50)
                 status_text.text(f"✅ Uploaded to {provider.upper()}")
                 time.sleep(0.3)
-            
+
             # Stage 4: AI Analysis (50-90%)
             style_modifier = get_platform_prompt_modifier(target_platform)
-            
+
             analysis_prompt = f"""
 You are an expert video analyst and content strategist. Your primary and most important task is to provide a complete and accurate transcription of the provided video in SRT format.
 After the transcription, you will also provide a creative content plan.
@@ -489,10 +537,12 @@ Structure your entire response using the following markdown format, and do not i
 2. (Another detailed prompt)
 3. (Another detailed prompt)
 """
-            
-            status_text.text(f"🤖 Analyzing video with {provider.upper() if video_file else 'fallback'}...")
+
+            status_text.text(
+                f"🤖 Analyzing video with {provider.upper() if video_file else 'fallback'}..."
+            )
             progress_bar.progress(60)
-            
+
             # Simulate analysis progress
             for i in range(60, 90, 5):
                 time.sleep(0.5)
@@ -505,60 +555,65 @@ Structure your entire response using the following markdown format, and do not i
                     status_text.text("🤖 Writing blog post...")
                 elif i == 85:
                     status_text.text("🤖 Crafting social media content...")
-            
-            results = llm_client.analyze_video(video_file, analysis_prompt, enable_grounding=enable_grounding)
-            
+
+            results = llm_client.analyze_video(
+                video_file, analysis_prompt, enable_grounding=enable_grounding
+            )
+
             progress_bar.progress(90)
             status_text.text("✅ Analysis complete")
             time.sleep(0.3)
-            
+
             # Stage 5: Fact-Grounding Validation (90-95%)
-            if enable_grounding and results.get('captions'):
+            if enable_grounding and results.get("captions"):
                 status_text.text("🔍 Validating claims against transcript...")
                 progress_bar.progress(93)
                 time.sleep(0.5)
-            
+
             progress_bar.progress(95)
-            
+
             # Stage 6: Saving Results (95-100%)
             status_text.text("💾 Saving results to database...")
             progress_bar.progress(97)
-            
+
             if results and "error" not in results:
                 try:
                     video_id = storage_manager.save_analysis_results(
                         video_path=video_path,
                         results=results,
                         platform=target_platform,
-                        grounding_enabled=enable_grounding
+                        grounding_enabled=enable_grounding,
                     )
                     st.session_state.current_video_id = video_id
                 except Exception as e:
                     st.warning(f"⚠️ Results generated but not saved to database: {e}")
-            
+
             progress_bar.progress(100)
             status_text.text("✅ All processing complete!")
             time.sleep(1)
-            
+
             # Clear progress indicators
             progress_bar.empty()
             status_text.empty()
-            
+
             return results
-            
+
         except Exception as e:
             progress_bar.empty()
             status_text.empty()
             st.error(f"❌ Processing failed: {e}")
             return {"error": str(e)}
 
-def process_video_with_llm(video_path, target_platform="General", enable_grounding=True):
+
+def process_video_with_llm(
+    video_path, target_platform="General", enable_grounding=True
+):
     """
     Legacy function for compatibility - redirects to progress version.
     """
     # This is kept for backward compatibility but won't be called directly anymore
     style_modifier = get_platform_prompt_modifier(target_platform)
-    
+
     analysis_prompt = f"""
 You are an expert video analyst and content strategist. Your primary and most important task is to provide a complete and accurate transcription of the provided video in SRT format.
 After the transcription, you will also provide a creative content plan.
@@ -602,25 +657,30 @@ Structure your entire response using the following markdown format, and do not i
 2. (Another detailed prompt)
 3. (Another detailed prompt)
 """
-    
+
     # Step 1: Upload video through wrapper
     with st.spinner("📤 Uploading video to AI service..."):
         video_file, provider = llm_client.upload_video_file(video_path)
-    
+
     if not video_file:
         st.warning("⚠️ Video upload failed. Generating fallback content...")
         return llm_client.analyze_video(None, analysis_prompt, enable_grounding=False)
-    
+
     # Step 2: Analyze video through wrapper with grounding
-    with st.spinner(f"🤖 Analyzing video with {provider.upper()} for {target_platform}..."):
-        results = llm_client.analyze_video(video_file, analysis_prompt, enable_grounding=enable_grounding)
-    
+    with st.spinner(
+        f"🤖 Analyzing video with {provider.upper()} for {target_platform}..."
+    ):
+        results = llm_client.analyze_video(
+            video_file, analysis_prompt, enable_grounding=enable_grounding
+        )
+
     return results
+
 
 def enhance_tweet_with_llm(tweet_text, target_platform="Twitter/X"):
     """Enhances a tweet using the LLM wrapper with platform-specific style."""
     style_modifier = get_platform_prompt_modifier(target_platform)
-    
+
     prompt = f"""You are a social media expert specializing in {target_platform}. 
 Enhance the following post to make it more engaging for {target_platform}.
 
@@ -631,34 +691,36 @@ IMPORTANT: Only use information already present in the original post. Do not add
 Original post: '{tweet_text}'
 
 Enhanced post (keep it under 280 characters if for Twitter/X):"""
-    
+
     return llm_client.generate_text(prompt)
+
 
 def generate_thumbnail_hf(prompt, reference_image=None):
     """Generates a thumbnail using Hugging Face SDXL."""
     if not hf_client:
         return None
-        
+
     enhanced_prompt = f"Ultra-detailed, cinematic, exaggerated, vibrant YouTube thumbnail. Clickable, dramatic lighting, no text. Concept: {prompt}"
     try:
         if reference_image:
             return hf_client.image_to_image(
-                image=reference_image, 
-                prompt=enhanced_prompt, 
-                guidance_scale=8.0, 
-                num_inference_steps=30
+                image=reference_image,
+                prompt=enhanced_prompt,
+                guidance_scale=8.0,
+                num_inference_steps=30,
             )
         else:
             return hf_client.text_to_image(
-                prompt=enhanced_prompt, 
-                guidance_scale=8.0, 
-                num_inference_steps=30, 
-                width=1024, 
-                height=576
+                prompt=enhanced_prompt,
+                guidance_scale=8.0,
+                num_inference_steps=30,
+                width=1024,
+                height=576,
             )
     except Exception as e:
         st.error(f"Thumbnail generation failed: {e}")
         return None
+
 
 def pil_to_bytes(image):
     """Converts PIL image to bytes for download."""
@@ -666,19 +728,24 @@ def pil_to_bytes(image):
     image.save(buf, format="PNG")
     return buf.getvalue()
 
+
 # --- Page Definitions ---
+
 
 def home_page():
     """Renders the landing/description page for the app."""
     st.title("🚀 Welcome to Creator Catalyst")
     st.header("Your AI-Powered Content Repurposing Co-Pilot")
-    st.markdown("""
+    st.markdown(
+        """
     Tired of the content grind? **Creator Catalyst** is your secret weapon. 
     Turn a single long-form video into a full-blown marketing campaign, instantly.
-    """)
+    """
+    )
     st.divider()
     st.subheader("What It Does")
-    st.markdown("""
+    st.markdown(
+        """
     - **✅ Accurate SRT Captions**
     - **💡 Viral Shorts Ideas**
     - **✍️ Full-Length Blog Post**
@@ -688,13 +755,18 @@ def home_page():
     - **🔍 Fact-Grounding Verification**
     - **💾 Persistent Storage & History Browsing**
     - **💳 Credits-Based Usage System**
-    """)
-    
-    st.info("🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!")
-    st.success("💾 **Persistent Storage**: All your videos and content are automatically saved to a local database for easy browsing and reuse!")
-    
+    """
+    )
+
+    st.info(
+        "🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!"
+    )
+    st.success(
+        "💾 **Persistent Storage**: All your videos and content are automatically saved to a local database for easy browsing and reuse!"
+    )
+
     st.divider()
-    
+
     # Show current AI provider status
     provider = llm_client.get_current_provider()
     if provider != "none":
@@ -702,26 +774,27 @@ def home_page():
     else:
         st.warning("⚠️ No AI providers configured. Please add API keys to `.env.local`")
 
+
 def creator_tool_page():
     """Renders the main tool for video analysis and content generation."""
     st.title("🛠️ Creator Catalyst Tool")
-    
+
     # Initialize session state
-    if 'results' not in st.session_state: 
+    if "results" not in st.session_state:
         st.session_state.results = {}
-    if 'video_path' not in st.session_state: 
+    if "video_path" not in st.session_state:
         st.session_state.video_path = None
-    if 'enhanced_tweet' not in st.session_state: 
+    if "enhanced_tweet" not in st.session_state:
         st.session_state.enhanced_tweet = ""
-    if 'selected_platform' not in st.session_state:
+    if "selected_platform" not in st.session_state:
         st.session_state.selected_platform = "General"
-    if 'enable_grounding' not in st.session_state:
+    if "enable_grounding" not in st.session_state:
         st.session_state.enable_grounding = True
 
     # Show current provider AND credits
     provider = llm_client.get_current_provider()
     credits_balance = credits_manager.get_balance()
-    
+
     col1, col2 = st.columns(2)
     with col1:
         if provider != "none":
@@ -734,133 +807,168 @@ def creator_tool_page():
 
     # Platform Selection & Fact-Grounding Toggle
     col1, col2, col3 = st.columns([2, 2, 1])
-    
+
     with col1:
         selected_platform = st.selectbox(
             "🎯 Target Platform:",
             options=list(PLATFORM_TONES.keys()),
             index=list(PLATFORM_TONES.keys()).index(st.session_state.selected_platform),
-            help="This will adjust the tone and style of all generated content"
+            help="This will adjust the tone and style of all generated content",
         )
         st.session_state.selected_platform = selected_platform
-    
+
     with col2:
         platform_info = PLATFORM_TONES[selected_platform]
         st.info(f"**{selected_platform}**: {platform_info['description']}")
-    
+
     with col3:
         enable_grounding = st.checkbox(
             "🔍 Fact-Grounding",
             value=st.session_state.enable_grounding,
-            help="Verify all claims against transcript to prevent hallucinations"
+            help="Verify all claims against transcript to prevent hallucinations",
         )
         st.session_state.enable_grounding = enable_grounding
 
     st.divider()
 
-    uploaded_file = st.file_uploader("Upload your video file", type=['mp4','mov','webm','mkv'])
+    uploaded_file = st.file_uploader(
+        "Upload your video file", type=["mp4", "mov", "webm", "mkv"]
+    )
 
     if uploaded_file:
         temp_dir = tempfile.gettempdir()
         video_path = os.path.join(temp_dir, uploaded_file.name)
-        
+
         # Store video path in session state
         st.session_state.video_path = video_path
-        
+
         st.video(uploaded_file)
 
         # CHECK CREDITS BEFORE ANALYSIS
-        if st.button("🚀 Analyze Video & Generate All Content", type="primary", use_container_width=True):
+        if st.button(
+            "🚀 Analyze Video & Generate All Content",
+            type="primary",
+            use_container_width=True,
+        ):
             # Check if user has enough credits
-            has_credits, balance, cost = credits_manager.has_sufficient_credits('video_upload')
-            
+            has_credits, balance, cost = credits_manager.has_sufficient_credits(
+                "video_upload"
+            )
+
             if not has_credits:
-                st.error(f"❌ Insufficient credits! You need {cost} credits but only have {balance}.")
+                st.error(
+                    f"❌ Insufficient credits! You need {cost} credits but only have {balance}."
+                )
                 st.info("💡 Purchase more credits from the Credits page to continue.")
                 return
-            
+
             # Show cost confirmation
-            st.info(f"💳 This operation will cost **{cost} credits**. Current balance: {balance}")
-            
+            st.info(
+                f"💳 This operation will cost **{cost} credits**. Current balance: {balance}"
+            )
+
             # Deduct credits
             success, new_balance = credits_manager.deduct_credits(
-                'video_upload',
-                description=f"Video analysis: {uploaded_file.name}"
+                "video_upload", description=f"Video analysis: {uploaded_file.name}"
             )
-            
+
             if not success:
                 st.error("❌ Failed to deduct credits. Please try again.")
                 return
-            
+
             st.success(f"✅ Credits deducted! New balance: **{new_balance}**")
-            
+
             # Process video with progress tracking
             st.session_state.results = process_video_with_progress(
                 uploaded_file=uploaded_file,
                 video_path=video_path,
                 target_platform=st.session_state.selected_platform,
-                enable_grounding=st.session_state.enable_grounding
+                enable_grounding=st.session_state.enable_grounding,
             )
-            
+
             if st.session_state.results and "error" not in st.session_state.results:
-                st.success(f"✅ Full analysis complete for {st.session_state.selected_platform}!")
-                
+                st.success(
+                    f"✅ Full analysis complete for {st.session_state.selected_platform}!"
+                )
+
                 # Show grounding stats if available
-                if 'grounding_metadata' in st.session_state.results:
-                    metadata = st.session_state.results['grounding_metadata']
-                    if metadata.get('enabled'):
+                if "grounding_metadata" in st.session_state.results:
+                    metadata = st.session_state.results["grounding_metadata"]
+                    if metadata.get("enabled"):
                         st.metric("🔍 Fact-Grounding Active", "Enabled")
                         col1, col2, col3 = st.columns(3)
                         with col1:
-                            st.metric("Blog Verification", f"{metadata.get('blog_grounding_rate', 0):.0%}")
+                            st.metric(
+                                "Blog Verification",
+                                f"{metadata.get('blog_grounding_rate', 0):.0%}",
+                            )
                         with col2:
-                            st.metric("Social Verification", f"{metadata.get('social_grounding_rate', 0):.0%}")
+                            st.metric(
+                                "Social Verification",
+                                f"{metadata.get('social_grounding_rate', 0):.0%}",
+                            )
                         with col3:
-                            st.metric("Shorts Verification", f"{metadata.get('shorts_verification_rate', 0):.0%}")
-                        
+                            st.metric(
+                                "Shorts Verification",
+                                f"{metadata.get('shorts_verification_rate', 0):.0%}",
+                            )
+
             elif st.session_state.results.get("captions"):
-                st.warning("⚠️ Using fallback/mock results (primary AI provider unavailable)")
+                st.warning(
+                    "⚠️ Using fallback/mock results (primary AI provider unavailable)"
+                )
             else:
                 st.error("❌ Analysis failed. Please check your API configuration.")
 
     # --- Display Results ---
-    if st.session_state.results and st.session_state.results.get('captions'):
+    if st.session_state.results and st.session_state.results.get("captions"):
         results = st.session_state.results
-        
+
         # Show platform badge and grounding status
         status_col1, status_col2 = st.columns(2)
         with status_col1:
-            st.success(f"📊 Content optimized for: **{st.session_state.selected_platform}**")
+            st.success(
+                f"📊 Content optimized for: **{st.session_state.selected_platform}**"
+            )
         with status_col2:
-            if results.get('grounding_metadata', {}).get('enabled'):
+            if results.get("grounding_metadata", {}).get("enabled"):
                 st.success("🔍 **Fact-Grounding**: Active")
             else:
                 st.info("🔍 **Fact-Grounding**: Disabled")
-        
-        tabs = st.tabs(["🎧 Captions", "✂️ Shorts Ideas", "📝 Blog Post", "📱 Social Media", "🎨 Thumbnails", "📊 Grounding Report"])
+
+        tabs = st.tabs(
+            [
+                "🎧 Captions",
+                "✂️ Shorts Ideas",
+                "📝 Blog Post",
+                "📱 Social Media",
+                "🎨 Thumbnails",
+                "📊 Grounding Report",
+            ]
+        )
 
         with tabs[0]:
             st.header("Captions (SRT)")
-            captions_text = results.get('captions', "No captions generated.")
+            captions_text = results.get("captions", "No captions generated.")
             st.text_area("Transcript", captions_text, height=400)
-            
+
             # Download button
             if captions_text and captions_text != "No captions generated.":
                 st.download_button(
                     label="📥 Download SRT File",
                     data=captions_text,
                     file_name="captions.srt",
-                    mime="text/plain"
+                    mime="text/plain",
                 )
 
         with tabs[1]:
             st.header("Short Clip Ideas")
             st.caption(f"Optimized for {st.session_state.selected_platform}")
-            shorts = results.get('shorts_ideas', [])
-            
+            shorts = results.get("shorts_ideas", [])
+
             if not shorts:
                 st.info("No shorts ideas generated.")
-            
+
             for i, short in enumerate(shorts):
                 with st.container(border=True):
                     # Add validation badge if available
@@ -868,113 +976,137 @@ def creator_tool_page():
                     with title_col:
                         st.subheader(f"Idea {i+1}: {short.get('topic', 'N/A')}")
                     with badge_col:
-                        if 'validation_badge' in short:
+                        if "validation_badge" in short:
                             st.markdown(f"**{short['validation_badge']}**")
-                    
-                    st.markdown(f"**Timestamps:** `{short.get('start_time', 'N/A')} - {short.get('end_time', 'N/A')}`")
+
+                    st.markdown(
+                        f"**Timestamps:** `{short.get('start_time', 'N/A')} - {short.get('end_time', 'N/A')}`"
+                    )
                     st.markdown(f"**Summary:** {short.get('summary', 'N/A')}")
-                    
-                    if 'supporting_text' in short:
+
+                    if "supporting_text" in short:
                         with st.expander("🔍 Transcript Evidence"):
-                            st.caption(short['supporting_text'])
-                    
+                            st.caption(short["supporting_text"])
+
                     # CREDITS CHECK FOR CLIP GENERATION
                     if st.button(f"✂️ Prepare Clip {i+1}", key=f"clip_{i}"):
-                        has_credits, balance, cost = credits_manager.has_sufficient_credits('shorts_clip')
-                        
+                        has_credits, balance, cost = (
+                            credits_manager.has_sufficient_credits("shorts_clip")
+                        )
+
                         if not has_credits:
                             st.error(f"❌ Need {cost} credits (have {balance})")
                         elif st.session_state.video_path:
                             with st.spinner("Clipping with ffmpeg..."):
                                 clip_path = clip_video_ffmpeg(
-                                    st.session_state.video_path, 
-                                    short.get('start_time'), 
-                                    short.get('end_time')
+                                    st.session_state.video_path,
+                                    short.get("start_time"),
+                                    short.get("end_time"),
                                 )
                                 if clip_path:
                                     # Deduct credits
                                     credits_manager.deduct_credits(
-                                        'shorts_clip',
-                                        description=f"Shorts clip {i+1}"
+                                        "shorts_clip", description=f"Shorts clip {i+1}"
                                     )
                                     st.session_state[f"clip_path_{i}"] = clip_path
                                     st.success(f"✅ Clip {i+1} ready! (1 credit used)")
-                    
+
                     if f"clip_path_{i}" in st.session_state:
                         with open(st.session_state[f"clip_path_{i}"], "rb") as file:
                             st.download_button(
-                                label=f"📥 Download Clip {i+1}", 
-                                data=file, 
-                                file_name=f"clip_{i+1}.mp4", 
+                                label=f"📥 Download Clip {i+1}",
+                                data=file,
+                                file_name=f"clip_{i+1}.mp4",
                                 mime="video/mp4",
-                                key=f"download_{i}"
+                                key=f"download_{i}",
                             )
 
         with tabs[2]:
             st.header("Blog Post")
             st.caption(f"Written in {st.session_state.selected_platform} style")
-            blog_content = results.get('blog_post', 'No blog post generated.')
-            
+            blog_content = results.get("blog_post", "No blog post generated.")
+
             # Show comparison if grounding filtered content
-            if 'blog_post_original' in results:
-                compare_tab1, compare_tab2 = st.tabs(["✅ Verified Version", "⚠️ Original (Unfiltered)"])
+            if "blog_post_original" in results:
+                compare_tab1, compare_tab2 = st.tabs(
+                    ["✅ Verified Version", "⚠️ Original (Unfiltered)"]
+                )
                 with compare_tab1:
                     st.markdown(blog_content)
                 with compare_tab2:
                     st.warning("This version may contain unverified claims")
-                    st.markdown(results['blog_post_original'])
+                    st.markdown(results["blog_post_original"])
             else:
                 st.markdown(blog_content)
-            
-            if blog_content != 'No blog post generated.':
+
+            if blog_content != "No blog post generated.":
                 st.download_button(
                     label="📥 Download as Markdown",
                     data=blog_content,
                     file_name="blog_post.md",
-                    mime="text/markdown"
+                    mime="text/markdown",
                 )
 
         with tabs[3]:
             st.header("Social Media Post")
             st.caption(f"Optimized for {st.session_state.selected_platform}")
-            original_tweet = results.get('social_post', 'No post generated.')
-            
+            original_tweet = results.get("social_post", "No post generated.")
+
             if not st.session_state.enhanced_tweet:
                 st.session_state.enhanced_tweet = original_tweet
 
             st.markdown(f"> {st.session_state.enhanced_tweet}")
-            
+
             col1, col2 = st.columns([1, 3])
             # CREDITS CHECK FOR ENHANCEMENT
             with col1:
                 if st.button("✨ Enhance Post", key="enhance_tweet"):
-                    has_credits, balance, cost = credits_manager.has_sufficient_credits('tweet_enhancement')
+                    has_credits, balance, cost = credits_manager.has_sufficient_credits(
+                        "tweet_enhancement"
+                    )
+
 
 # ---- INSERT SIDEBAR + NAVIGATION + ROUTING LOGIC HERE ----
 with st.sidebar:
     st.markdown("## 🚀 Creator Catalyst")
-    
+
+    st.divider()
+
+    # Theme Toggle
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.caption("🎨 Theme")
+    with col2:
+        current_theme = theme_manager.get_current_theme()
+        theme_icon = "🌙" if current_theme == "light" else "☀️"
+        if st.button(theme_icon, key="theme_toggle", help="Toggle dark/light mode"):
+            theme_manager.toggle_theme()
+
     st.divider()
     credits_balance = credits_manager.get_balance()
-    
+
     col1, col2 = st.columns(2)
     with col1:
         st.metric("💳 Credits", credits_balance)
     with col2:
         if st.button("➕ Add"):
             st.session_state.show_credits_modal = True
-    
+
     with st.expander("💰 Credit Costs"):
         st.caption("📹 Video Upload: 5 credits")
         st.caption("📝 Blog Post: 2 credits")
         st.caption("📱 Social Post: 1 credit")
         st.caption("✂️ Shorts Clip: 1 credit")
         st.caption("🎨 Thumbnail: 1 credit")
-    
+
     st.divider()
-    
-    page = st.radio("Navigation", ["Home", "Creator Tool", "History", "Credits"], label_visibility="hidden")
-    
+
+    page = st.radio(
+        "Navigation",
+        ["Home", "Creator Tool", "History", "Credits"],
+        label_visibility="hidden",
+    )
+
     st.divider()
     st.caption("📊 Database Statistics")
     try:
@@ -990,8 +1122,8 @@ elif page == "Creator Tool":
     creator_tool_page()
 elif page == "History":
     from history import render_history_page, render_video_details
-    
-    if 'selected_video_id' in st.session_state:
+
+    if "selected_video_id" in st.session_state:
         render_video_details(storage_manager, st.session_state.selected_video_id)
     else:
         render_history_page()
