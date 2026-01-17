@@ -86,7 +86,7 @@ class Database:
     Handles all persistence operations with proper transaction management.
     """
     
-    def __init__(self, db_path: str = "creator_catalyst.db"):
+    def __init__(self, db_path: str = "data/creator_catalyst.db"):
         """
         Initialize database connection.
         

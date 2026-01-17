@@ -6,7 +6,7 @@ Admin interface for viewing AI usage logs, analytics, and rate limits.
 import streamlit as st
 from datetime import datetime, timedelta
 import pandas as pd
-from ai_request_logger import get_ai_logger
+from src.database.ai_request_logger import get_ai_logger
 
 
 def render_ai_logs_dashboard():

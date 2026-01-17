@@ -10,7 +10,7 @@ from datetime import datetime
 
 # Import fact-grounding system
 try:
-    from fact_grounding import FactGrounder, create_grounding_prompt_modifier
+    from src.core.fact_grounding import FactGrounder, create_grounding_prompt_modifier
     GROUNDING_AVAILABLE = True
 except ImportError:
     GROUNDING_AVAILABLE = False
@@ -18,7 +18,7 @@ except ImportError:
 
 # Import AI request logger
 try:
-    from ai_request_logger import get_ai_logger
+    from src.database.ai_request_logger import get_ai_logger
     LOGGING_AVAILABLE = True
 except ImportError:
     LOGGING_AVAILABLE = False

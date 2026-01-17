@@ -5,7 +5,7 @@ Displays engagement predictions and recommendations in the Streamlit interface.
 
 import streamlit as st
 from typing import Dict, Optional
-from engagement_scorer import EngagementScore, get_engagement_scorer
+from src.core.engagement_scorer import EngagementScore, get_engagement_scorer
 
 
 def render_engagement_score_card(score: EngagementScore, show_details: bool = True):

@@ -5,7 +5,7 @@ Displays credit balance, usage history, and purchase options.
 
 import streamlit as st
 from datetime import datetime
-from credits_manager import get_credits_manager
+from src.database.credits_manager import get_credits_manager
 
 
 def render_credits_page():
