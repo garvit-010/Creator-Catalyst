@@ -25,6 +25,15 @@ from src.ui.components.engagement_ui import (
     analyze_and_display_score,
     add_engagement_scoring_section
 )
+# NEW: Import keyword extraction modules
+from src.core.keyword_extractor import get_keyword_extractor
+from src.ui.components.keyword_ui import (
+    render_keywords_badge,
+    display_keywords_section,
+    extract_and_show_keywords,
+    show_keywords_grid
+)
+from src.database.csv_exporter import get_csv_exporter
 
 
 def render_credits_page(credits_manager):
@@ -774,7 +783,8 @@ def creator_tool_page():
             "📝 Blog Post",
             "📱 Social Media",
             "🎨 Thumbnails",
-            "📊 Grounding Report",
+            "� Keywords & SEO",
+            "�📊 Grounding Report",
             "📈 Engagement Analytics"  # NEW TAB
         ])
 
@@ -888,6 +898,20 @@ def creator_tool_page():
                 st.session_state.selected_platform
             )
 
+            # NEW: Keywords section
+            if blog_content != 'No blog post generated.':
+                st.divider()
+                st.markdown("### 🔍 Keywords for SEO")
+                extractor = get_keyword_extractor()
+                blog_keywords = extractor.extract_keywords(
+                    blog_content,
+                    num_keywords=8,
+                    content_type='blog'
+                )
+                if blog_keywords:
+                    render_keywords_badge(blog_keywords)
+                    st.caption("💡 Use these keywords in: Title, Meta description, Headers, and Alt text")
+
             if blog_content != 'No blog post generated.':
                 st.download_button(
                     label="📥 Download as Markdown",
@@ -949,6 +973,21 @@ def creator_tool_page():
                                 st.success("✅ Post enhanced! (1 credit used)")
                                 st.rerun()
 
+            st.divider()
+
+            # NEW: Keywords section for social post
+            if st.session_state.enhanced_tweet != "No post generated.":
+                st.markdown("### 🔍 Keywords & Hashtags for SEO")
+                extractor = get_keyword_extractor()
+                social_keywords = extractor.extract_keywords(
+                    st.session_state.enhanced_tweet,
+                    num_keywords=8,
+                    content_type='social'
+                )
+                if social_keywords:
+                    render_keywords_badge(social_keywords)
+                    st.caption("💡 Use these as: #hashtags or mentions in your post")
+
             if st.session_state.enhanced_tweet != "No post generated.":
                 st.download_button(
                     label="📥 Copy to Clipboard",
@@ -1003,8 +1042,79 @@ def creator_tool_page():
                                 key=f"dl_thumb_{idx}"
                             )
 
-        # TAB 5: Grounding Report
+        # TAB 5: Keywords & SEO
         with tabs[5]:
+            st.header("🔍 Keywords & SEO Optimization")
+            st.markdown("Extract and optimize keywords from all generated content for better search visibility.")
+            
+            # Extract keywords from all content types
+            all_keywords = {}
+            
+            # Blog keywords
+            if results.get('blog_post') and results.get('blog_post') != 'No blog post generated.':
+                st.subheader("📝 Blog Post Keywords")
+                blog_keywords = extract_and_show_keywords(
+                    results['blog_post'],
+                    content_type='blog',
+                    title='🔍 Blog Keywords for SEO',
+                    num_keywords=8
+                )
+                all_keywords['blog'] = blog_keywords
+            
+            st.divider()
+            
+            # Social Post keywords
+            if results.get('social_post') and results.get('social_post') != 'No post generated.':
+                st.subheader("📱 Social Media Keywords")
+                social_keywords = extract_and_show_keywords(
+                    results['social_post'],
+                    content_type='social',
+                    title='🔍 Social Post Keywords',
+                    num_keywords=8
+                )
+                all_keywords['social'] = social_keywords
+            
+            st.divider()
+            
+            # Shorts keywords (from first short idea)
+            if results.get('shorts_ideas'):
+                st.subheader("⚡ Shorts Keywords")
+                shorts_text = " ".join([s.get('summary', '') for s in results.get('shorts_ideas', [])[:3]])
+                if shorts_text.strip():
+                    shorts_keywords = extract_and_show_keywords(
+                        shorts_text,
+                        content_type='shorts',
+                        title='🔍 Shorts Keywords',
+                        num_keywords=8
+                    )
+                    all_keywords['shorts'] = shorts_keywords
+            
+            st.divider()
+            
+            # Export options
+            if all_keywords:
+                st.markdown("### 📥 Export Keywords")
+                
+                # Keywords-only CSV
+                exporter = get_csv_exporter()
+                keywords_csv = exporter.export_keywords_csv(
+                    all_keywords,
+                    platform=st.session_state.selected_platform,
+                    title="Extracted Keywords"
+                )
+                
+                st.download_button(
+                    label="📥 Download Keywords as CSV",
+                    data=keywords_csv,
+                    file_name=f"keywords_{st.session_state.selected_platform.lower()}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+                
+                st.caption("💡 Use these keywords in: Meta titles, Meta descriptions, Image alt text, Hashtags (#), and Content tags")
+
+        # TAB 6: Grounding Report
+        with tabs[6]:
             st.header("Fact-Grounding Report")
 
             if not results.get('grounding_metadata', {}).get('enabled'):
@@ -1053,8 +1163,8 @@ def creator_tool_page():
                         for claim in metadata['social_filtered_claims']:
                             st.markdown(f"- {claim}")
 
-        # TAB 6: Engagement Analytics (NEW)
-        with tabs[6]:
+        # TAB 7: Engagement Analytics
+        with tabs[7]:
             st.header("📈 Engagement Analytics")
             st.markdown("Compare engagement potential across all generated content")
 
