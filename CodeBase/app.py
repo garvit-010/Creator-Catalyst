@@ -1148,7 +1148,12 @@ with st.sidebar:
 
     st.divider()
 
-    page = st.radio("Navigation", ["Home", "Creator Tool", "History", "Credits"], label_visibility="hidden")
+    # Updated navigation with AI Logs option
+    page = st.radio(
+        "Navigation", 
+        ["Home", "Creator Tool", "History", "Credits", "AI Logs"], 
+        label_visibility="hidden"
+    )
 
     st.divider()
     st.caption("📊 Database Statistics")
@@ -1158,7 +1163,27 @@ with st.sidebar:
         st.caption(f"Content Pieces: {stats['total_contents']}")
     except:
         pass
+    
+    st.divider()
+    
+    # NEW: AI Usage Stats in Sidebar
+    try:
+        from ai_request_logger import get_ai_logger
+        logger = get_ai_logger()
+        
+        # Get current hour stats
+        is_allowed, rate_stats = logger.check_rate_limit()
+        
+        st.caption("⚡ AI Usage (This Hour)")
+        st.caption(f"Requests: {rate_stats['requests_used']}/100")
+        st.caption(f"Tokens: {rate_stats['tokens_used']:,}")
+        
+        if not is_allowed:
+            st.warning("⚠️ Rate limit reached!")
+    except:
+        pass
 
+# Route to pages
 if page == "Home":
     home_page()
 elif page == "Creator Tool":
@@ -1172,3 +1197,7 @@ elif page == "History":
         render_history_page()
 elif page == "Credits":
     render_credits_page(credits_manager)
+elif page == "AI Logs":
+    # NEW: AI Logs Dashboard
+    from ai_logs_dashboard import render_ai_logs_dashboard
+    render_ai_logs_dashboard()
