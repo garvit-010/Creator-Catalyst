@@ -66,11 +66,13 @@ Get Creator Catalyst running locally with these simple steps:
 ### Step 1: Clone the Repository
 
 ```bash
-git clone [https://github.com/garvit-010/Creator-Catalyst.git](https://github.com/garvit-010/Creator-Catalyst.git)
+git clone https://github.com/garvit-010/Creator-Catalyst.git
 cd Creator-Catalyst
-Step 2: Create Python Environment
+```
 
-Bash
+### Step 2: Create Python Environment
+
+```bash
 # Create virtual environment
 python -m venv venv
 
@@ -79,74 +81,115 @@ python -m venv venv
 venv\Scripts\activate
 # macOS/Linux:
 source venv/bin/activate
-Step 3: Install Dependencies
+```
 
-Bash
+### Step 3: Install Dependencies
+
+```bash
 pip install -r CodeBase/requirements.txt
-Step 4: Configure API Keys
+```
+### Step 4: Configure API Keys
 
 Create a .env.local file in the project root:
 
-Bash
+```Bash
 # Copy example template
 cp CodeBase/.env.example .env.local
 Edit .env.local with your API keys:
+```
 
-Properties
-# Required for Video Analysis
+* Properties
+Required for Video Analysis
+```bash
 GOOGLE_API_KEY="your_google_api_key_here"
+```
 
-# Required for Image Generation
+* Required for Image Generation
+```bash
 HF_TOKEN="your_huggingface_token_here"
+```
 
-# Optional Fallbacks
+* Optional Fallbacks
+```bash
 OPENAI_API_KEY="your_openai_key_here"
 # OR for local Ollama:
 # USE_OLLAMA="true"
-Step 5: Launch the Application
+```
+### Step 5: Launch the Application
 
-Bash
+```  Bash
 streamlit run CodeBase/app.py
 ✅ Success: Open http://localhost:8501 in your browser!
+```
 
-💻 CLI Tools
-Creator Catalyst includes a robust Command Line Interface (CLI) for managing your database and credits without opening the web UI.
+## 💻 CLI Tools
+* Creator Catalyst includes a robust Command Line Interface (CLI) for managing your database and credits without opening the web UI.
 
-Location: CodeBase/db_cli.py
+* Location: CodeBase/db_cli.py
 
-Common Commands
+## Common Commands
 
-View Database Stats
-
-Bash
+* View Database Stats
+```Bash
 python CodeBase/db_cli.py stats
-List Processed Videos
+```
 
-Bash
+* List Processed Videos
+```Bash
 python CodeBase/db_cli.py list
-Search Videos
+```
 
-Bash
+* Search Videos
+```Bash
 python CodeBase/db_cli.py search "tutorial"
-Manage Credits
+```
 
-Bash
-# Check balance
+* Check balance , Manage Credits
+```Bash
 python CodeBase/db_cli.py credits-balance
+```
 
-# Add credits (Admin)
+* Add credits (Admin)
+```bash
 python CodeBase/db_cli.py credits-add 100 -m "Bonus credits"
-💰 Credit Economy
+```
+## 💰 Credit Economy
 The application uses a simulated credit system to track resource usage:
 
-Operation	Cost	Description
-Video Upload	5 credits	Full multimodal analysis & grounding
-Blog Post	2 credits	SEO-optimized article generation
-Social Post	1 credit	Platform-specific post generation
-Shorts Clip	1 credit	FFmpeg video clipping
-Thumbnail	1 credit	AI image generation
-Enhancement	1 credit	Post refinement
-Note: New users start with 50 free credits.
+| Operation    | Cost       | Description                          |
+|--------------|-----------|--------------------------------------|
+| Video Upload | 5 credits | Full multimodal analysis & grounding |
+| Blog Post    | 2 credits | SEO-optimized article generation     |
+| Social Post  | 1 credit  | Platform-specific post generation    |
+| Shorts Clip  | 1 credit  | FFmpeg video clipping                |
+| Thumbnail    | 1 credit  | AI image generation                  |
+| Enhancement  | 1 credit  | Post refinement                      |
 
-License
-MIT License
+**Note:** New users start with **50 free credits**.
+
+## License
+### MIT License
+
+Copyright (c) 2026 Creator Catalyst
+
+Permission is hereby granted, free of charge, to any person obtaining a copy  
+of this software and associated documentation files (the "Software"), to deal  
+in the Software without restriction, including without limitation the rights  
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell  
+copies of the Software, and to permit persons to whom the Software is  
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all  
+copies or substantial portions of the Software.
+
+---
+
+**Disclaimer:**  
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR  
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,  
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE  
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER  
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,  
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE  
+SOFTWARE.
+
