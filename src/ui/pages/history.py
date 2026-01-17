@@ -7,8 +7,8 @@ import streamlit as st
 from datetime import datetime
 import json
 
-from storage_manager import get_storage_manager
-from database import Database
+from src.database.storage_manager import get_storage_manager
+from src.database.database import Database
 
 
 def render_history_page():

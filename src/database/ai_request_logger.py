@@ -60,7 +60,7 @@ class AIRequestLogger:
         }
     }
     
-    def __init__(self, db_path: str = "creator_catalyst.db"):
+    def __init__(self, db_path: str = "data/creator_catalyst.db"):
         """Initialize AI request logger with database connection."""
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

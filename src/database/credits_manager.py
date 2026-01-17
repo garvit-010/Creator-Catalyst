@@ -29,7 +29,7 @@ class CreditsManager:
     # Default starting credits for new users
     DEFAULT_CREDITS = 50
     
-    def __init__(self, db_path: str = "creator_catalyst.db"):
+    def __init__(self, db_path: str = "data/creator_catalyst.db"):
         """Initialize credits manager with database connection."""
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

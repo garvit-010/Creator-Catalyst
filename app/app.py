@@ -4,20 +4,23 @@ import time
 import io
 import re
 import tempfile
+import sys
 import subprocess
 from PIL import Image
 from huggingface_hub import InferenceClient
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.append(str(ROOT_DIR))
 
 # Import the wrapper and storage
-from llm_wrapper import LLMWrapper
-from storage_manager import get_storage_manager
-from credits_manager import get_credits_manager
+from src.core.llm_wrapper import LLMWrapper
+from src.database.storage_manager import get_storage_manager
+from src.database.credits_manager import get_credits_manager
 # NEW: Import engagement scoring modules
-from engagement_scorer import get_engagement_scorer
-from engagement_ui import (
+from src.core.engagement_scorer import get_engagement_scorer
+from src.ui.components.engagement_ui import (
     render_engagement_score_card,
     analyze_and_display_score,
     add_engagement_scoring_section
@@ -1168,7 +1171,7 @@ with st.sidebar:
     
     # NEW: AI Usage Stats in Sidebar
     try:
-        from ai_request_logger import get_ai_logger
+        from src.database.ai_request_logger import get_ai_logger
         logger = get_ai_logger()
         
         # Get current hour stats
@@ -1189,7 +1192,7 @@ if page == "Home":
 elif page == "Creator Tool":
     creator_tool_page()
 elif page == "History":
-    from history import render_history_page, render_video_details
+    from src.ui.pages.history import render_history_page, render_video_details
 
     if 'selected_video_id' in st.session_state:
         render_video_details(storage_manager, st.session_state.selected_video_id)
@@ -1199,5 +1202,5 @@ elif page == "Credits":
     render_credits_page(credits_manager)
 elif page == "AI Logs":
     # NEW: AI Logs Dashboard
-    from ai_logs_dashboard import render_ai_logs_dashboard
+    from src.ui.pages.ai_logs_dashboard import render_ai_logs_dashboard
     render_ai_logs_dashboard()

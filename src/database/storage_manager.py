@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from database import get_database, Database, Video, ContentOutput, GroundingReport
+from src.database.database import get_database, Database, Video, ContentOutput, GroundingReport
 
 
 class StorageManager:
@@ -20,7 +20,7 @@ class StorageManager:
     Handles the conversion between app data structures and database models.
     """
 
-    def __init__(self, db_path: str = "creator_catalyst.db"):
+    def __init__(self, db_path: str = "data/creator_catalyst.db"):
         """Initialize storage manager with database connection."""
         self.db = get_database(db_path)
         print(f"✅ Storage manager initialized")

@@ -8,9 +8,9 @@ import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
-from credits_manager import get_credits_manager
-from database import get_database, Database
-from storage_manager import get_storage_manager
+from src.database.credits_manager import get_credits_manager
+from src.database.database import get_database, Database
+from src.database.storage_manager import get_storage_manager
 
 
 def cmd_init(args):
