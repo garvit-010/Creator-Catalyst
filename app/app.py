@@ -34,6 +34,14 @@ from src.ui.components.keyword_ui import (
     show_keywords_grid
 )
 from src.database.csv_exporter import get_csv_exporter
+# NEW: Import title generation modules
+from src.core.title_generator import get_title_generator
+from src.ui.components.title_ui import (
+    render_title_suggestions,
+    render_video_titles_section,
+    render_short_titles_section,
+    render_all_titles_dashboard
+)
 
 
 def render_credits_page(credits_manager):
@@ -633,12 +641,14 @@ def home_page():
     - **🔍 Fact-Grounding Verification**
     - **💾 Persistent Storage & History Browsing**
     - **💳 Credits-Based Usage System**
-    - **📊 Engagement Score Analytics** ← NEW!
+    - **📊 Engagement Score Analytics**
+    - **🎬 AI Title Generator** ← NEW!
     """)
     
     st.info("🔍 **New Feature**: All generated content is now verified against the video transcript to prevent AI hallucinations!")
     st.success("💾 **Persistent Storage**: All your videos and content are automatically saved to a local database for easy browsing and reuse!")
     st.success("📊 **Engagement Scoring**: Predict content performance before publishing!")
+    st.success("🎬 **Title Generator**: Auto-suggest 3 catchy titles for your videos and shorts! Pick one or edit your own.")
     
     st.divider()
     
@@ -776,16 +786,17 @@ def creator_tool_page():
             else:
                 st.info("🔍 **Fact-Grounding**: Disabled")
 
-        # UPDATED: Added new Engagement Analytics tab
+        # UPDATED: Added new Engagement Analytics tab and Title Generator tab
         tabs = st.tabs([
             "🎧 Captions",
             "✂️ Shorts Ideas",
             "📝 Blog Post",
             "📱 Social Media",
             "🎨 Thumbnails",
-            "� Keywords & SEO",
-            "�📊 Grounding Report",
-            "📈 Engagement Analytics"  # NEW TAB
+            "🎬 Title Generator",  # NEW: Title suggestions tab
+            "🔍 Keywords & SEO",
+            "📊 Grounding Report",
+            "📈 Engagement Analytics"
         ])
 
         # TAB 0: Captions
@@ -823,7 +834,16 @@ def creator_tool_page():
                     st.markdown(f"**Timestamps:** `{short.get('start_time', 'N/A')} - {short.get('end_time', 'N/A')}`")
                     st.markdown(f"**Summary:** {short.get('summary', 'N/A')}")
 
-                    # NEW: Quick engagement score for each short
+                    # NEW: Title suggestions for this short
+                    render_short_titles_section(
+                        short_index=i,
+                        short_topic=short.get('topic', f'Short {i+1}'),
+                        short_summary=short.get('summary', ''),
+                        platform=st.session_state.selected_platform,
+                        llm_wrapper=llm_client
+                    )
+
+                    # Quick engagement score for each short
                     if st.button(f"📊 Score This Idea", key=f"score_short_{i}"):
                         scorer = get_engagement_scorer()
                         summary = short.get('summary', '')
@@ -1042,8 +1062,50 @@ def creator_tool_page():
                                 key=f"dl_thumb_{idx}"
                             )
 
-        # TAB 5: Keywords & SEO
+        # TAB 5: Title Generator (NEW)
         with tabs[5]:
+            st.header("🎬 Title Generator")
+            st.markdown("Generate catchy, click-worthy titles for your video and shorts")
+            st.caption(f"Optimized for {st.session_state.selected_platform}")
+            
+            # Get video summary from blog post or captions
+            video_summary = results.get('blog_post', '') or results.get('captions', '')[:500]
+            shorts_ideas = results.get('shorts_ideas', [])
+            
+            # Render the complete title dashboard
+            selected_titles = render_all_titles_dashboard(
+                video_summary=video_summary,
+                shorts_ideas=shorts_ideas,
+                platform=st.session_state.selected_platform,
+                llm_wrapper=llm_client
+            )
+            
+            # Store selected titles in session state
+            if selected_titles:
+                st.session_state['selected_titles'] = selected_titles
+            
+            # Show tips
+            st.divider()
+            with st.expander("💡 Title Writing Tips", expanded=False):
+                st.markdown("""
+**Proven Title Formulas:**
+- **Numbers**: "5 Hidden Tips You'll Wish You Knew"
+- **Curiosity**: "The Truth About X Nobody Tells You"
+- **How-To**: "How to Master X in Minutes"
+- **Secret**: "Secret Strategy (Explained)"
+- **Urgency**: "Watch This Before You X"
+
+**Power Words That Work:**
+Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, Instant, Easy
+
+**Platform Tips:**
+- **YouTube**: Keep under 60 characters, front-load keywords
+- **TikTok**: Be casual, use trending phrases
+- **Instagram**: Make it aesthetic, use emojis
+                """)
+
+        # TAB 6: Keywords & SEO
+        with tabs[6]:
             st.header("🔍 Keywords & SEO Optimization")
             st.markdown("Extract and optimize keywords from all generated content for better search visibility.")
             
@@ -1113,8 +1175,8 @@ def creator_tool_page():
                 
                 st.caption("💡 Use these keywords in: Meta titles, Meta descriptions, Image alt text, Hashtags (#), and Content tags")
 
-        # TAB 6: Grounding Report
-        with tabs[6]:
+        # TAB 7: Grounding Report
+        with tabs[7]:
             st.header("Fact-Grounding Report")
 
             if not results.get('grounding_metadata', {}).get('enabled'):
@@ -1163,8 +1225,8 @@ def creator_tool_page():
                         for claim in metadata['social_filtered_claims']:
                             st.markdown(f"- {claim}")
 
-        # TAB 7: Engagement Analytics
-        with tabs[7]:
+        # TAB 8: Engagement Analytics
+        with tabs[8]:
             st.header("📈 Engagement Analytics")
             st.markdown("Compare engagement potential across all generated content")
 
