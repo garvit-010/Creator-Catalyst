@@ -1,0 +1,12 @@
+
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    # If the app needs API keys, use env_file like we did before:
+    # env_file:
+    #   - .env
+    # volumes:
+    #   - .:/app

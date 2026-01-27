@@ -528,6 +528,21 @@ Access comprehensive AI usage analytics:
 
 ---
 
+## 🐳 Docker Support
+
+You can run the application using Docker to ensure a consistent environment.
+
+### Prerequisites
+- Docker
+- Docker Compose
+
+### Running the App
+1. **Build and start the container:**
+   ```bash
+   docker-compose up --build
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
