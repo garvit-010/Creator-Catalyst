@@ -1,26 +1,23 @@
-# Use python 3.9 slim image
+# 1. Base Image
 FROM python:3.9-slim
 
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies
-# ADDED: ffmpeg (Critical for video processing)
+# 2. Setup System Dependencies (ffmpeg is crucial here)
 RUN apt-get update && apt-get install -y \
-    gcc \
-    libpq-dev \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install dependencies
+# 3. Work Directory
+WORKDIR /app
+
+# 4. Copy Requirements & Install (Cache Layer)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the app code
+# 5. COPY THE APP CODE (This was the critical fix in the other repo)
 COPY . .
 
-# Expose port 5000
+# 6. Expose Port
 EXPOSE 5000
 
-# Run Streamlit on port 5000
-CMD ["streamlit", "run", "app/app.py", "--server.port=5000", "--server.address=0.0.0.0"]
+# 7. Run Command (Keep Streamlit!)
+CMD ["streamlit", "run", "app.py", "--server.port=5000", "--server.address=0.0.0.0"]
