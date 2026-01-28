@@ -8,6 +8,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
 
+# Import Anthropic for Claude support
+try:
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    print("⚠️ Anthropic package not installed. Install with: pip install anthropic")
+
 # Import fact-grounding system
 try:
     from src.core.fact_grounding import FactGrounder, create_grounding_prompt_modifier
@@ -30,34 +38,70 @@ load_dotenv(env_path)
 
 class LLMWrapper:
     """
-    Unified interface for LLM providers (Gemini, OpenAI, Ollama) with fallback logic.
-    Now includes comprehensive request logging and rate limiting.
+    Unified interface for LLM providers (Gemini, OpenAI, Claude, Ollama) with fallback logic.
+    Now includes comprehensive request logging, rate limiting, and model switching.
     """
+    
+    # Supported models per provider
+    SUPPORTED_MODELS = {
+        'gemini': ['gemini-2.0-flash-exp', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+        'openai': ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+        'claude': ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
+        'ollama': ['llama3.2', 'mistral', 'codellama']
+    }
+    
     def __init__(self):
         # API Keys
         self.google_api_key = os.getenv('GOOGLE_API_KEY')
         self.openai_api_key = os.getenv('OPENAI_API_KEY')
+        self.anthropic_api_key = os.getenv('ANTHROPIC_API_KEY')
         self.ollama_base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434/v1')
         self.fallback_enabled = os.getenv('ENABLE_FALLBACK', 'true').lower() == 'true'
+        
+        # Primary model selection from ENV
+        self.primary_provider = os.getenv('PRIMARY_AI_MODEL', 'gemini').lower()
         
         # Initialize logger
         self.logger = get_ai_logger() if LOGGING_AVAILABLE else None
         
-        # Track which provider is currently active
+        # Track which provider/model is currently active
         self.current_provider = None
+        self.current_model = None
+        
+        # Store last used model info for display
+        self.last_used_provider = None
+        self.last_used_model = None
         
         # Configure Gemini
         self.gemini_model = None
+        self.gemini_model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
         if self.google_api_key:
             try:
                 genai.configure(api_key=self.google_api_key)
-                self.gemini_model = genai.GenerativeModel("gemini-2.0-flash-exp")
-                self.current_provider = "gemini"
-                print(f"✅ Gemini initialized successfully (google-generativeai v{genai.__version__})")
+                self.gemini_model = genai.GenerativeModel(self.gemini_model_name)
+                if self.primary_provider == "gemini" or not self.current_provider:
+                    self.current_provider = "gemini"
+                    self.current_model = self.gemini_model_name
+                print(f"✅ Gemini initialized successfully (model: {self.gemini_model_name})")
             except Exception as e:
                 print(f"❌ Failed to initialize Gemini: {e}")
         else:
             print("⚠️ GOOGLE_API_KEY not found in environment")
+        
+        # Configure Claude/Anthropic
+        self.claude_client = None
+        self.claude_model_name = os.getenv('CLAUDE_MODEL', 'claude-3-5-sonnet-20241022')
+        if self.anthropic_api_key and ANTHROPIC_AVAILABLE:
+            try:
+                self.claude_client = anthropic.Anthropic(api_key=self.anthropic_api_key)
+                if self.primary_provider == "claude" or (not self.current_provider and self.primary_provider == "claude"):
+                    self.current_provider = "claude"
+                    self.current_model = self.claude_model_name
+                print(f"✅ Claude initialized successfully (model: {self.claude_model_name})")
+            except Exception as e:
+                print(f"❌ Failed to initialize Claude: {e}")
+        elif self.anthropic_api_key and not ANTHROPIC_AVAILABLE:
+            print("⚠️ ANTHROPIC_API_KEY found but anthropic package not installed")
         
         # Configure OpenAI / Ollama Client
         self.openai_client = None
@@ -67,9 +111,10 @@ class LLMWrapper:
             try:
                 self.openai_client = OpenAI(api_key=self.openai_api_key)
                 self.openai_model = os.getenv('OPENAI_MODEL', 'gpt-4o')
-                if not self.current_provider:
+                if self.primary_provider == "openai" or (not self.current_provider and self.primary_provider == "openai"):
                     self.current_provider = "openai"
-                print(f"✅ OpenAI initialized successfully")
+                    self.current_model = self.openai_model
+                print(f"✅ OpenAI initialized successfully (model: {self.openai_model})")
             except Exception as e:
                 print(f"❌ Failed to initialize OpenAI: {e}")
                 
@@ -80,11 +125,127 @@ class LLMWrapper:
                     api_key='ollama'
                 )
                 self.openai_model = os.getenv('OLLAMA_MODEL', 'llama3.2')
-                if not self.current_provider:
+                if self.primary_provider == "ollama" or not self.current_provider:
                     self.current_provider = "ollama"
-                print(f"✅ Ollama initialized successfully")
+                    self.current_model = self.openai_model
+                print(f"✅ Ollama initialized successfully (model: {self.openai_model})")
             except Exception as e:
                 print(f"❌ Failed to initialize Ollama: {e}")
+        
+        # Set to primary provider if available
+        self._set_primary_provider()
+    
+    def _set_primary_provider(self):
+        """Set the current provider based on PRIMARY_AI_MODEL setting."""
+        if self.primary_provider == "gemini" and self.gemini_model:
+            self.current_provider = "gemini"
+            self.current_model = self.gemini_model_name
+        elif self.primary_provider == "claude" and self.claude_client:
+            self.current_provider = "claude"
+            self.current_model = self.claude_model_name
+        elif self.primary_provider == "openai" and self.openai_client and self.openai_api_key:
+            self.current_provider = "openai"
+            self.current_model = self.openai_model
+        elif self.primary_provider == "ollama" and self.openai_client:
+            self.current_provider = "ollama"
+            self.current_model = self.openai_model
+    
+    def switch_provider(self, provider: str, model: str = None) -> bool:
+        """
+        Switch to a different AI provider/model at runtime.
+        Returns True if switch was successful, False otherwise.
+        """
+        provider = provider.lower()
+        
+        if provider == "gemini":
+            if not self.gemini_model:
+                print(f"❌ Cannot switch to Gemini: not initialized")
+                return False
+            if model and model in self.SUPPORTED_MODELS['gemini']:
+                try:
+                    self.gemini_model = genai.GenerativeModel(model)
+                    self.gemini_model_name = model
+                except Exception as e:
+                    print(f"❌ Failed to switch Gemini model: {e}")
+                    return False
+            self.current_provider = "gemini"
+            self.current_model = self.gemini_model_name
+            
+        elif provider == "claude":
+            if not self.claude_client:
+                print(f"❌ Cannot switch to Claude: not initialized")
+                return False
+            if model and model in self.SUPPORTED_MODELS['claude']:
+                self.claude_model_name = model
+            self.current_provider = "claude"
+            self.current_model = self.claude_model_name
+            
+        elif provider == "openai":
+            if not self.openai_client or not self.openai_api_key:
+                print(f"❌ Cannot switch to OpenAI: not initialized")
+                return False
+            if model and model in self.SUPPORTED_MODELS['openai']:
+                self.openai_model = model
+            self.current_provider = "openai"
+            self.current_model = self.openai_model
+            
+        elif provider == "ollama":
+            if not self.openai_client:
+                print(f"❌ Cannot switch to Ollama: not initialized")
+                return False
+            if model:
+                self.openai_model = model
+            self.current_provider = "ollama"
+            self.current_model = self.openai_model
+        else:
+            print(f"❌ Unknown provider: {provider}")
+            return False
+        
+        print(f"✅ Switched to {self.current_provider.upper()} (model: {self.current_model})")
+        return True
+    
+    def get_available_providers(self) -> dict:
+        """Returns a dictionary of available providers and their models."""
+        available = {}
+        
+        if self.gemini_model:
+            available['gemini'] = {
+                'models': self.SUPPORTED_MODELS['gemini'],
+                'current_model': self.gemini_model_name,
+                'status': 'active' if self.current_provider == 'gemini' else 'available'
+            }
+        
+        if self.claude_client:
+            available['claude'] = {
+                'models': self.SUPPORTED_MODELS['claude'],
+                'current_model': self.claude_model_name,
+                'status': 'active' if self.current_provider == 'claude' else 'available'
+            }
+        
+        if self.openai_client and self.openai_api_key:
+            available['openai'] = {
+                'models': self.SUPPORTED_MODELS['openai'],
+                'current_model': self.openai_model,
+                'status': 'active' if self.current_provider == 'openai' else 'available'
+            }
+        
+        if self.openai_client and not self.openai_api_key:
+            available['ollama'] = {
+                'models': self.SUPPORTED_MODELS['ollama'],
+                'current_model': self.openai_model,
+                'status': 'active' if self.current_provider == 'ollama' else 'available'
+            }
+        
+        return available
+    
+    def get_model_info(self) -> dict:
+        """Returns current provider and model information for display."""
+        return {
+            'provider': self.current_provider or 'none',
+            'model': self.current_model or 'none',
+            'last_used_provider': self.last_used_provider,
+            'last_used_model': self.last_used_model
+        }
 
     def _check_rate_limit(self, user_id: str = "default_user") -> bool:
         """Check if user is within rate limits."""
@@ -240,8 +401,9 @@ class LLMWrapper:
 
     def generate_text(self, prompt, retries=3, user_id="default_user"):
         """
-        Generates text with fallback: Gemini -> OpenAI/Ollama -> Mock
-        Includes comprehensive logging.
+        Generates text using the configured primary provider with fallback support.
+        Supports: Gemini, Claude, OpenAI, Ollama
+        Includes comprehensive logging and tracks which model was used.
         Returns: str (generated text)
         """
         # Check rate limit
@@ -253,21 +415,93 @@ class LLMWrapper:
         error_msg = None
         tokens_used = 0
         provider_used = None
+        model_used = None
         
         # Estimate tokens (rough approximation)
         estimated_tokens = len(prompt.split()) * 1.3
         
-        # 1. Try Gemini
-        if self.gemini_model:
-            for attempt in range(retries):
+        # Build provider order based on current_provider setting
+        providers_to_try = []
+        if self.current_provider == "gemini" and self.gemini_model:
+            providers_to_try.append("gemini")
+        elif self.current_provider == "claude" and self.claude_client:
+            providers_to_try.append("claude")
+        elif self.current_provider == "openai" and self.openai_client and self.openai_api_key:
+            providers_to_try.append("openai")
+        elif self.current_provider == "ollama" and self.openai_client:
+            providers_to_try.append("ollama")
+        
+        # Add fallback providers if enabled
+        if self.fallback_enabled:
+            if self.gemini_model and "gemini" not in providers_to_try:
+                providers_to_try.append("gemini")
+            if self.claude_client and "claude" not in providers_to_try:
+                providers_to_try.append("claude")
+            if self.openai_client and self.openai_api_key and "openai" not in providers_to_try:
+                providers_to_try.append("openai")
+            if self.openai_client and not self.openai_api_key and "ollama" not in providers_to_try:
+                providers_to_try.append("ollama")
+        
+        # Try each provider
+        for provider in providers_to_try:
+            if provider == "gemini":
+                # Try Gemini
+                for attempt in range(retries):
+                    try:
+                        print(f"🤖 Generating text with Gemini [{self.gemini_model_name}] (attempt {attempt + 1}/{retries})")
+                        response = self.gemini_model.generate_content(prompt)
+                        
+                        elapsed_ms = int((time.time() - start_time) * 1000)
+                        tokens_used = int(estimated_tokens + len(response.text.split()) * 1.3)
+                        provider_used = "gemini"
+                        model_used = self.gemini_model_name
+                        success = True
+                        
+                        # Log successful request
+                        self._log_request(
+                            endpoint="/generate_text",
+                            provider=provider_used,
+                            operation_type="text_generation",
+                            tokens_used=tokens_used,
+                            cost_credits=0.0,  # Gemini free tier
+                            response_time_ms=elapsed_ms,
+                            success=True,
+                            metadata={'prompt_length': len(prompt), 'model': model_used}
+                        )
+                        
+                        # Track last used model info
+                        self.last_used_provider = provider_used
+                        self.last_used_model = model_used
+                        print(f"   ✅ Success with {provider_used.upper()} [{model_used}]!")
+                        return response.text
+                        
+                    except Exception as e:
+                        error_msg = str(e)
+                        print(f"   ❌ Gemini failed: {e}")
+                        if attempt < retries - 1:
+                            time.sleep(2)
+                        else:
+                            print("   ⚠️ Switching to fallback provider...")
+            
+            elif provider == "claude":
+                # Try Claude
                 try:
-                    print(f"🤖 Generating text with Gemini (attempt {attempt + 1}/{retries})")
-                    response = self.gemini_model.generate_content(prompt)
+                    print(f"🤖 Generating text with Claude [{self.claude_model_name}]...")
+                    
+                    message = self.claude_client.messages.create(
+                        model=self.claude_model_name,
+                        max_tokens=4000,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
                     
                     elapsed_ms = int((time.time() - start_time) * 1000)
-                    tokens_used = int(estimated_tokens + len(response.text.split()) * 1.3)
-                    provider_used = "gemini"
+                    tokens_used = message.usage.input_tokens + message.usage.output_tokens if hasattr(message, 'usage') else int(estimated_tokens * 2)
+                    provider_used = "claude"
+                    model_used = self.claude_model_name
                     success = True
+                    
+                    # Calculate cost (Claude pricing)
+                    cost_credits = 2.0  # Example cost
                     
                     # Log successful request
                     self._log_request(
@@ -275,66 +509,70 @@ class LLMWrapper:
                         provider=provider_used,
                         operation_type="text_generation",
                         tokens_used=tokens_used,
-                        cost_credits=0.0,  # Gemini free tier
+                        cost_credits=cost_credits,
                         response_time_ms=elapsed_ms,
                         success=True,
-                        metadata={'prompt_length': len(prompt)}
+                        metadata={'prompt_length': len(prompt), 'model': model_used}
                     )
                     
-                    self.current_provider = "gemini"
-                    print(f"   ✅ Success!")
-                    return response.text
+                    # Track last used model info
+                    self.last_used_provider = provider_used
+                    self.last_used_model = model_used
+                    print(f"   ✅ Success with {provider_used.upper()} [{model_used}]!")
+                    return message.content[0].text
                     
                 except Exception as e:
                     error_msg = str(e)
-                    print(f"   ❌ Gemini failed: {e}")
-                    if attempt < retries - 1:
-                        time.sleep(2)
-                    else:
+                    print(f"   ❌ Claude failed: {e}")
+                    if self.fallback_enabled:
                         print("   ⚠️ Switching to fallback provider...")
+            
+            elif provider in ["openai", "ollama"]:
+                # Try OpenAI / Ollama
+                try:
+                    provider_name = "OpenAI" if provider == "openai" else "Ollama"
+                    model_name = self.openai_model
+                    print(f"🤖 Generating text with {provider_name} [{model_name}]...")
+                    
+                    response = self.openai_client.chat.completions.create(
+                        model=self.openai_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7,
+                        max_tokens=4000
+                    )
+                    
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else int(estimated_tokens * 2)
+                    provider_used = provider
+                    model_used = model_name
+                    success = True
+                    
+                    # Calculate cost
+                    cost_credits = 0.0 if provider == "ollama" else 2.0  # Example cost
+                    
+                    # Log successful request
+                    self._log_request(
+                        endpoint="/generate_text",
+                        provider=provider_used,
+                        operation_type="text_generation",
+                        tokens_used=tokens_used,
+                        cost_credits=cost_credits,
+                        response_time_ms=elapsed_ms,
+                        success=True,
+                        metadata={'prompt_length': len(prompt), 'model': model_used}
+                    )
+                    
+                    # Track last used model info
+                    self.last_used_provider = provider_used
+                    self.last_used_model = model_used
+                    print(f"   ✅ Success with {provider_name} [{model_used}]!")
+                    return response.choices[0].message.content
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"   ❌ {provider_name} failed: {e}")
 
-        # 2. Try OpenAI / Ollama (Fallback)
-        if self.openai_client and self.fallback_enabled:
-            try:
-                provider_name = "OpenAI" if self.openai_api_key else "Ollama"
-                print(f"🤖 Generating text with {provider_name}...")
-                
-                response = self.openai_client.chat.completions.create(
-                    model=self.openai_model,
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7,
-                    max_tokens=4000
-                )
-                
-                elapsed_ms = int((time.time() - start_time) * 1000)
-                tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else int(estimated_tokens * 2)
-                provider_used = "openai" if self.openai_api_key else "ollama"
-                success = True
-                
-                # Calculate cost
-                cost_credits = 0.0 if provider_used == "ollama" else 2.0  # Example cost
-                
-                # Log successful request
-                self._log_request(
-                    endpoint="/generate_text",
-                    provider=provider_used,
-                    operation_type="text_generation",
-                    tokens_used=tokens_used,
-                    cost_credits=cost_credits,
-                    response_time_ms=elapsed_ms,
-                    success=True,
-                    metadata={'prompt_length': len(prompt)}
-                )
-                
-                self.current_provider = provider_used
-                print(f"   ✅ Success with {provider_name}!")
-                return response.choices[0].message.content
-                
-            except Exception as e:
-                error_msg = str(e)
-                print(f"   ❌ {provider_name} fallback failed: {e}")
-
-        # 3. Log failure
+        # Log failure
         elapsed_ms = int((time.time() - start_time) * 1000)
         self._log_request(
             endpoint="/generate_text",
@@ -354,7 +592,7 @@ class LLMWrapper:
     def analyze_video(self, video_file_obj, prompt, retries=3, enable_grounding=True, user_id="default_user"):
         """
         Analyzes video using Gemini with fallback to mock response.
-        Includes comprehensive logging and rate limiting.
+        Includes comprehensive logging, rate limiting, and model tracking.
         """
         # Check rate limit
         if not self._check_rate_limit(user_id):
@@ -364,7 +602,8 @@ class LLMWrapper:
                 "shorts_ideas": [],
                 "blog_post": "",
                 "social_post": "",
-                "thumbnail_ideas": []
+                "thumbnail_ideas": [],
+                "model_info": {"provider": "none", "model": "none"}
             }
         
         start_time = time.time()
@@ -375,11 +614,11 @@ class LLMWrapper:
         # Estimate tokens
         estimated_tokens = len(prompt.split()) * 1.3 + 5000  # Video analysis uses more tokens
         
-        # 1. Try Gemini Video Analysis
+        # 1. Try Gemini Video Analysis (only Gemini supports video)
         if self.gemini_model and video_file_obj:
             for attempt in range(retries):
                 try:
-                    print(f"🤖 Analyzing video with Gemini (attempt {attempt + 1}/{retries})")
+                    print(f"🤖 Analyzing video with Gemini [{self.gemini_model_name}] (attempt {attempt + 1}/{retries})")
                     
                     # Add grounding instructions if enabled
                     enhanced_prompt = prompt
@@ -415,15 +654,24 @@ FACT-GROUNDING REQUIREMENT:
                         success=True,
                         metadata={
                             'grounding_enabled': enable_grounding,
-                            'prompt_length': len(prompt)
+                            'prompt_length': len(prompt),
+                            'model': self.gemini_model_name
                         }
                     )
                     
-                    self.current_provider = "gemini"
-                    print(f"   ✅ Analysis complete!")
+                    # Track last used model info
+                    self.last_used_provider = "gemini"
+                    self.last_used_model = self.gemini_model_name
+                    print(f"   ✅ Analysis complete with GEMINI [{self.gemini_model_name}]!")
                     
                     # Parse response
                     parsed_results = self._parse_response(response.text)
+                    
+                    # Add model info to results
+                    parsed_results['model_info'] = {
+                        'provider': 'gemini',
+                        'model': self.gemini_model_name
+                    }
                     
                     # Apply fact-grounding validation if enabled
                     if enable_grounding and GROUNDING_AVAILABLE and parsed_results.get('captions'):
@@ -456,7 +704,9 @@ FACT-GROUNDING REQUIREMENT:
         
         if self.fallback_enabled:
             print("⚠️ Using mock analysis response (video analysis requires Gemini)")
-            return self._generate_mock_analysis()
+            mock_result = self._generate_mock_analysis()
+            mock_result['model_info'] = {'provider': 'mock', 'model': 'fallback'}
+            return mock_result
             
         return {
             "error": "Video analysis failed. Gemini API is required for video processing.",
@@ -636,3 +886,23 @@ Your video upload to the Gemini API failed. This is typically caused by configur
     def get_current_provider(self):
         """Returns the name of the currently active provider."""
         return self.current_provider or "none"
+    
+    def get_current_model(self):
+        """Returns the name of the currently active model."""
+        return self.current_model or "none"
+    
+    def get_provider_display_name(self):
+        """Returns a formatted display string for current provider and model."""
+        if self.current_provider and self.current_model:
+            return f"{self.current_provider.upper()} ({self.current_model})"
+        elif self.current_provider:
+            return self.current_provider.upper()
+        return "No Provider"
+    
+    def get_last_used_display(self):
+        """Returns a formatted display string for the last used provider and model."""
+        if self.last_used_provider and self.last_used_model:
+            return f"{self.last_used_provider.upper()} ({self.last_used_model})"
+        elif self.last_used_provider:
+            return self.last_used_provider.upper()
+        return "N/A"
