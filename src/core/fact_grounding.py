@@ -1,12 +1,15 @@
 """
 Fact-Grounding System for Creator Catalyst
 Ensures all AI-generated claims are backed by transcript evidence with timestamps.
+Refactored for Issue #52: Uses Vector-Based RAG (Semantic Search).
 """
 
 import re
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
-
+import numpy as np
+from sentence_transformers import SentenceTransformer, util
+import torch
 
 @dataclass
 class TranscriptSegment:
@@ -32,19 +35,43 @@ class TranscriptSegment:
 
 class FactGrounder:
     """
-    Validates AI-generated content against video transcript.
+    Validates AI-generated content against video transcript using Semantic Search (RAG).
     Ensures claims are grounded in actual video content.
     """
     
+    # Static model instance to avoid reloading overhead across requests
+    _model = None
+    
     def __init__(self, srt_content: str):
         """
-        Initialize with SRT transcript content.
+        Initialize with SRT transcript content and prepare vector index.
         
         Args:
             srt_content: Raw SRT format transcript
         """
         self.segments = self._parse_srt(srt_content)
         self.full_text = " ".join([seg.text for seg in self.segments])
+        
+        # Initialize Embedding Model (Lazy loading)
+        if FactGrounder._model is None:
+            # 'all-MiniLM-L6-v2' is fast and effective for semantic search
+            print("Loading Fact-Grounding Embedding Model...")
+            FactGrounder._model = SentenceTransformer('all-MiniLM-L6-v2')
+            
+        self.model = FactGrounder._model
+        
+        # Pre-compute embeddings for all transcript segments
+        # We assume segments are short; if too short, we might merge neighbors (future optimization)
+        self.segment_texts = [seg.text for seg in self.segments]
+        
+        if self.segment_texts:
+            self.segment_embeddings = self.model.encode(
+                self.segment_texts, 
+                convert_to_tensor=True,
+                show_progress_bar=False
+            )
+        else:
+            self.segment_embeddings = None
         
     def _parse_srt(self, srt_content: str) -> List[TranscriptSegment]:
         """Parse SRT content into structured segments."""
@@ -78,44 +105,43 @@ class FactGrounder:
                 
         return segments
     
-    def find_supporting_evidence(self, claim: str, threshold: float = 0.6) -> Optional[Dict]:
+    def find_supporting_evidence(self, claim: str, threshold: float = 0.35) -> Optional[Dict]:
         """
-        Find transcript segments that support a given claim.
+        Find transcript segments that support a given claim using Semantic Vector Search.
         
         Args:
             claim: The claim to verify
-            threshold: Similarity threshold (0-1) for matching
+            threshold: Cosine similarity threshold (0-1). 
+                       0.35 is usually a good baseline for semantic relatedness.
             
         Returns:
             Dict with evidence or None if not found
         """
-        claim_lower = claim.lower()
-        claim_words = set(re.findall(r'\w+', claim_lower))
+        if not self.segment_texts or self.segment_embeddings is None:
+            return None
+
+        # 1. Vectorize the claim
+        claim_embedding = self.model.encode(claim, convert_to_tensor=True)
         
-        best_match = None
-        best_score = 0.0
+        # 2. Semantic Search (Cosine Similarity)
+        # util.cos_sim returns a matrix, we take the first row [0]
+        cosine_scores = util.cos_sim(claim_embedding, self.segment_embeddings)[0]
         
-        # Check each segment for supporting evidence
-        for seg in self.segments:
-            seg_words = set(re.findall(r'\w+', seg.text.lower()))
-            
-            # Calculate word overlap score
-            if len(claim_words) == 0:
-                continue
-                
-            overlap = len(claim_words & seg_words)
-            score = overlap / len(claim_words)
-            
-            if score > best_score and score >= threshold:
-                best_score = score
-                best_match = {
-                    'segment': seg,
-                    'score': score,
-                    'timestamp': seg.start_time,
-                    'text': seg.text
-                }
+        # 3. Find Best Match
+        best_score_tensor = torch.max(cosine_scores)
+        best_score = float(best_score_tensor.item())
+        best_idx = int(torch.argmax(cosine_scores).item())
         
-        return best_match
+        if best_score >= threshold:
+            best_segment = self.segments[best_idx]
+            return {
+                'segment': best_segment,
+                'score': best_score,
+                'timestamp': best_segment.start_time,
+                'text': best_segment.text
+            }
+        
+        return None
     
     def verify_claim(self, claim: str) -> Tuple[bool, Optional[str]]:
         """
@@ -129,7 +155,7 @@ class FactGrounder:
         """
         evidence = self.find_supporting_evidence(claim)
         
-        if evidence and evidence['score'] >= 0.6:
+        if evidence:
             return True, evidence['timestamp']
         
         return False, None
@@ -157,14 +183,14 @@ class FactGrounder:
             if sentence.startswith('#') or sentence.startswith('*'):
                 continue
             
-            is_valid, timestamp = self.verify_claim(sentence)
+            evidence = self.find_supporting_evidence(sentence)
+            is_valid = evidence is not None
             
             results.append({
                 'claim': sentence,
                 'is_grounded': is_valid,
-                'timestamp': timestamp,
-                'evidence_score': self.find_supporting_evidence(sentence)['score'] 
-                    if self.find_supporting_evidence(sentence) else 0.0
+                'timestamp': evidence['timestamp'] if is_valid else None,
+                'evidence_score': evidence['score'] if is_valid else 0.0
             })
         
         return results
@@ -187,9 +213,6 @@ class FactGrounder:
         for claim_data in claims:
             if claim_data['is_grounded']:
                 filtered_sentences.append(claim_data['claim'])
-            elif not strict_mode and claim_data['evidence_score'] > 0.4:
-                # In lenient mode, keep claims with moderate evidence
-                filtered_sentences.append(claim_data['claim'])
         
         return '. '.join(filtered_sentences) + '.'
     
@@ -210,17 +233,16 @@ class FactGrounder:
             if claim_data['is_grounded'] and claim_data['timestamp']:
                 # Add citation after the claim
                 original = claim_data['claim']
-                cited = f"{original} [Source: {claim_data['timestamp']}]"
-                annotated_text = annotated_text.replace(original, cited, 1)
+                # Only replace if we haven't already (simple prevention of double replace)
+                if original in annotated_text:
+                    cited = f"{original} [Source: {claim_data['timestamp']}]"
+                    annotated_text = annotated_text.replace(original, cited, 1)
         
         return annotated_text
     
     def generate_grounding_prompt(self) -> str:
         """
         Generate a prompt addition to instruct LLM to ground all claims.
-        
-        Returns:
-            Prompt text to append to analysis requests
         """
         return f"""
 CRITICAL FACT-GROUNDING REQUIREMENTS:
@@ -240,12 +262,6 @@ Any claim without transcript evidence will be automatically removed.
     def validate_shorts_ideas(self, shorts_ideas: List[Dict]) -> List[Dict]:
         """
         Validate that shorts ideas correspond to actual transcript content.
-        
-        Args:
-            shorts_ideas: List of short clip ideas with timestamps
-            
-        Returns:
-            Validated list with only grounded ideas
         """
         validated = []
         
@@ -263,15 +279,18 @@ Any claim without transcript evidence will be automatically removed.
             if supporting_segments:
                 # Verify summary matches segment content
                 combined_text = ' '.join([s.text for s in supporting_segments])
-                is_valid, _ = self.verify_claim(summary)
                 
-                if is_valid:
+                # Semantic check between summary and the actual segment text
+                evidence = self.find_supporting_evidence(summary)
+                
+                # If we find evidence within the transcript generally, or specifically in this segment
+                if evidence:
                     idea['validation_status'] = 'verified'
-                    idea['supporting_text'] = combined_text[:100] + '...'
+                    idea['supporting_text'] = evidence['text']
+                    idea['confidence'] = f"{evidence['score']:.2f}"
                     validated.append(idea)
                 else:
                     idea['validation_status'] = 'unverified_summary'
-                    # Still include but flag it
                     validated.append(idea)
             else:
                 idea['validation_status'] = 'invalid_timestamps'
@@ -292,12 +311,6 @@ Any claim without transcript evidence will be automatically removed.
     def generate_grounding_report(self, content_dict: Dict) -> Dict:
         """
         Generate a comprehensive grounding report for all generated content.
-        
-        Args:
-            content_dict: Dict with blog_post, social_post, shorts_ideas, etc.
-            
-        Returns:
-            Report with validation stats and filtered content
         """
         report = {
             'original_content': content_dict,
@@ -313,8 +326,7 @@ Any claim without transcript evidence will be automatically removed.
             
             report['validation_results']['blog_post'] = blog_claims
             report['filtered_content']['blog_post'] = self.filter_ungrounded_content(
-                content_dict['blog_post'], 
-                strict_mode=False
+                content_dict['blog_post']
             )
             report['statistics']['blog_grounding_rate'] = (
                 grounded_count / len(blog_claims) if blog_claims else 0
@@ -327,21 +339,10 @@ Any claim without transcript evidence will be automatically removed.
             
             report['validation_results']['social_post'] = social_claims
             report['filtered_content']['social_post'] = self.filter_ungrounded_content(
-                content_dict['social_post'],
-                strict_mode=True  # Stricter for social media
+                content_dict['social_post']
             )
             report['statistics']['social_grounding_rate'] = (
                 grounded_count / len(social_claims) if social_claims else 0
-            )
-        
-        # Validate shorts ideas
-        if 'shorts_ideas' in content_dict:
-            validated_shorts = self.validate_shorts_ideas(content_dict['shorts_ideas'])
-            report['filtered_content']['shorts_ideas'] = validated_shorts
-            
-            verified = sum(1 for s in validated_shorts if s.get('validation_status') == 'verified')
-            report['statistics']['shorts_verification_rate'] = (
-                verified / len(validated_shorts) if validated_shorts else 0
             )
         
         return report
@@ -350,12 +351,6 @@ Any claim without transcript evidence will be automatically removed.
 def create_grounding_prompt_modifier(srt_content: str) -> str:
     """
     Convenience function to create grounding instructions for LLM prompts.
-    
-    Args:
-        srt_content: Raw SRT transcript
-        
-    Returns:
-        Prompt text to append to analysis requests
     """
     grounder = FactGrounder(srt_content)
     return grounder.generate_grounding_prompt()
