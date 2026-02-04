@@ -24,6 +24,7 @@ class Video:
     platform: str = "General"
     grounding_enabled: bool = True
     processing_status: str = "pending"  # pending, processing, completed, failed
+    searchable_text: str = ""  # New: Metadata blob for semantic search
     
     def to_dict(self):
         """Convert to dictionary."""
@@ -128,9 +129,17 @@ class Database:
                     platform TEXT DEFAULT 'General',
                     grounding_enabled INTEGER DEFAULT 1,
                     processing_status TEXT DEFAULT 'pending',
+                    searchable_text TEXT DEFAULT '',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Auto-Migration: Add searchable_text column if it's missing (for existing DBs)
+            try:
+                cursor.execute("SELECT searchable_text FROM videos LIMIT 1")
+            except sqlite3.OperationalError:
+                print("⚠️  Migrating database: Adding 'searchable_text' column for Semantic Search...")
+                cursor.execute("ALTER TABLE videos ADD COLUMN searchable_text TEXT DEFAULT ''")
             
             # Content outputs table
             cursor.execute("""
@@ -195,8 +204,9 @@ class Database:
             cursor.execute("""
                 INSERT INTO videos (
                     filename, file_path, file_size_mb, duration_seconds,
-                    uploaded_at, platform, grounding_enabled, processing_status
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    uploaded_at, platform, grounding_enabled, processing_status,
+                    searchable_text
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 video.filename,
                 video.file_path,
@@ -205,7 +215,8 @@ class Database:
                 video.uploaded_at or datetime.now().isoformat(),
                 video.platform,
                 1 if video.grounding_enabled else 0,
-                video.processing_status
+                video.processing_status,
+                video.searchable_text
             ))
             
             video_id = cursor.lastrowid
@@ -229,7 +240,8 @@ class Database:
                     uploaded_at=row['uploaded_at'],
                     platform=row['platform'],
                     grounding_enabled=bool(row['grounding_enabled']),
-                    processing_status=row['processing_status']
+                    processing_status=row['processing_status'],
+                    searchable_text=row['searchable_text'] if 'searchable_text' in row.keys() else ""
                 )
             return None
     
@@ -254,7 +266,8 @@ class Database:
                     uploaded_at=row['uploaded_at'],
                     platform=row['platform'],
                     grounding_enabled=bool(row['grounding_enabled']),
-                    processing_status=row['processing_status']
+                    processing_status=row['processing_status'],
+                    searchable_text=row['searchable_text'] if 'searchable_text' in row.keys() else ""
                 ))
             
             return videos
@@ -501,15 +514,20 @@ class Database:
             }
     
     def search_videos(self, query: str, limit: int = 50) -> List[Video]:
-        """Search videos by filename."""
+        """
+        Search videos by filename OR content (Semantic Search).
+        Queries the 'searchable_text' metadata blob.
+        """
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            # Search in both filename and the new metadata blob
+            search_pattern = f"%{query}%"
             cursor.execute("""
                 SELECT * FROM videos 
-                WHERE filename LIKE ? 
+                WHERE filename LIKE ? OR searchable_text LIKE ?
                 ORDER BY uploaded_at DESC 
                 LIMIT ?
-            """, (f"%{query}%", limit))
+            """, (search_pattern, search_pattern, limit))
             
             videos = []
             for row in cursor.fetchall():
@@ -522,7 +540,8 @@ class Database:
                     uploaded_at=row['uploaded_at'],
                     platform=row['platform'],
                     grounding_enabled=bool(row['grounding_enabled']),
-                    processing_status=row['processing_status']
+                    processing_status=row['processing_status'],
+                    searchable_text=row['searchable_text'] if 'searchable_text' in row.keys() else ""
                 ))
             
             return videos
