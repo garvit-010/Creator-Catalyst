@@ -259,6 +259,27 @@ class Database:
             
             return videos
     
+    def get_video(self, video_id: int) -> Optional[Video]:
+        """Get a video by ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                return Video(
+                    id=row['id'],
+                    filename=row['filename'],
+                    file_path=row['file_path'],
+                    file_size_mb=row['file_size_mb'],
+                    duration_seconds=row['duration_seconds'],
+                    uploaded_at=row['uploaded_at'],
+                    platform=row['platform'],
+                    grounding_enabled=bool(row['grounding_enabled']),
+                    processing_status=row['processing_status']
+                )
+            return None
+
     def update_video_status(self, video_id: int, status: str):
         """Update video processing status."""
         with self.get_connection() as conn:

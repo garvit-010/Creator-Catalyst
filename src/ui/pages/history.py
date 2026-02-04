@@ -9,6 +9,8 @@ import json
 
 from src.database.storage_manager import get_storage_manager
 from src.database.database import Database
+from src.database.report_generator import get_report_generator
+from src.core.strategy_advisor import get_strategy_advisor
 
 
 def render_history_page():
@@ -299,6 +301,25 @@ def render_video_details(storage, video_id):
     # Download Toolkit Button - Prominent placement
     col1, col2, col3 = st.columns([2, 2, 2])
     
+    with col1:
+        # Campaign Report Generator
+        try:
+            report_gen = get_report_generator()
+            pdf_path = report_gen.generate_report(video_id)
+            with open(pdf_path, 'rb') as f:
+                pdf_data = f.read()
+                st.download_button(
+                    label="📄 Campaign Summary (PDF)",
+                    data=pdf_data,
+                    file_name=f"Campaign_Summary_{video['filename'].rsplit('.', 1)[0]}.pdf",
+                    mime="application/pdf",
+                    key=f"report_download_{video_id}",
+                    use_container_width=True,
+                    help="Download a professional PDF summary of this video campaign"
+                )
+        except Exception as e:
+            st.error(f"Failed to generate report: {str(e)}")
+
     with col2:
         # Create ZIP and provide download button
         try:
@@ -338,6 +359,16 @@ def render_video_details(storage, video_id):
             st.markdown(f"**Total Claims:** {report['total_claims']}")
             st.markdown(f"**Verified:** {report['verified_claims']} ✅")
             st.markdown(f"**Unverified:** {report['unverified_claims']} ❌")
+    
+    # AI Strategy Tips
+    with st.expander("💡 AI Strategy Tips & Next Steps", expanded=True):
+        try:
+            advisor = get_strategy_advisor()
+            with st.spinner("Generating strategy tips..."):
+                tips = advisor.generate_next_steps(video_id)
+                st.markdown(tips)
+        except Exception as e:
+            st.info("Strategy tips will be available once content is fully analyzed.")
     
     # Content Tabs
     tabs = st.tabs(["📝 Captions", "📰 Blog Post", "📱 Social Post", "✂️ Shorts Ideas", "🎨 Thumbnails"])
