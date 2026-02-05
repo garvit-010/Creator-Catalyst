@@ -46,6 +46,34 @@ class StorageManager:
         Returns:
             video_id: ID of the created video record
         """
+        # --- ISSUE #54: Construct Semantic Metadata Blob ---
+        # Concatenate all generated content into a searchable string
+        metadata_blob_parts = [
+            os.path.basename(video_path),
+            platform,
+            results.get("captions", ""),
+            results.get("blog_post", ""),
+            results.get("social_post", "")
+        ]
+        
+        # Add Shorts Topics and Summaries
+        if results.get("shorts_ideas"):
+            for idea in results["shorts_ideas"]:
+                if isinstance(idea, dict):
+                    metadata_blob_parts.append(idea.get("topic", ""))
+                    metadata_blob_parts.append(idea.get("summary", ""))
+        
+        # Add Thumbnail Ideas
+        if results.get("thumbnail_ideas"):
+             for idea in results["thumbnail_ideas"]:
+                 if isinstance(idea, str):
+                     metadata_blob_parts.append(idea)
+                 elif isinstance(idea, dict):
+                     metadata_blob_parts.append(idea.get("idea", ""))
+
+        # Join and clean up (limit to ~100k chars to be safe)
+        searchable_text = " ".join([str(part) for part in metadata_blob_parts if part])[:100000]
+
         # Create video record
         file_stats = os.stat(video_path)
         video = Video(
@@ -56,6 +84,7 @@ class StorageManager:
             platform=platform,
             grounding_enabled=grounding_enabled,
             processing_status="completed",
+            searchable_text=searchable_text  # Save the blob!
         )
 
         video_id = self.db.create_video(video)
@@ -438,6 +467,7 @@ class StorageManager:
             platform=video_data.get("platform", "General"),
             grounding_enabled=video_data.get("grounding_enabled", True),
             processing_status="completed",
+            searchable_text=video_data.get("searchable_text", "")
         )
 
         video_id = self.db.create_video(video)
