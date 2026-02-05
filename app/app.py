@@ -42,6 +42,8 @@ from src.ui.components.title_ui import (
     render_short_titles_section,
     render_all_titles_dashboard
 )
+# [NEW] Import Audio Generator
+from src.core.audio_generator import generate_audio_file, AVAILABLE_VOICES
 
 
 def render_credits_page(credits_manager):
@@ -278,6 +280,7 @@ def render_credits_page(credits_manager):
     cost_data = [
         ("📹 Video Upload", "5 credits", "Full video analysis with captions, blog, social post, shorts, and thumbnails"),
         ("📝 Blog Generation", "2 credits", "Individual blog post generation"),
+        ("🎧 Audio Generation", "1 credit", "Convert blog post to audio podcast"),
         ("📱 Social Post", "1 credit", "Enhanced social media post"),
         ("✂️ Shorts Clip", "1 credit", "Video clip preparation and export"),
         ("🎨 Thumbnail Generation", "1 credit", "AI-generated thumbnail image"),
@@ -512,7 +515,7 @@ Structure your entire response using the following markdown format, and do not i
             
             status_text.text(f"🤖 Analyzing video with {provider.upper() if video_file else 'fallback'}...")
             progress_bar.progress(60)
-            
+
             for i in range(60, 90, 5):
                 time.sleep(0.5)
                 progress_bar.progress(i)
@@ -524,25 +527,25 @@ Structure your entire response using the following markdown format, and do not i
                     status_text.text("🤖 Writing blog post...")
                 elif i == 85:
                     status_text.text("🤖 Crafting social media content...")
-            
+
             results = llm_client.analyze_video(video_file, analysis_prompt, enable_grounding=enable_grounding)
-            
+
             progress_bar.progress(90)
             status_text.text("✅ Analysis complete")
             time.sleep(0.3)
-            
+
             # Stage 5: Fact-Grounding Validation (90-95%)
             if enable_grounding and results.get('captions'):
                 status_text.text("🔍 Validating claims against transcript...")
                 progress_bar.progress(93)
                 time.sleep(0.5)
-            
+
             progress_bar.progress(95)
-            
+
             # Stage 6: Saving Results (95-100%)
             status_text.text("💾 Saving results to database...")
             progress_bar.progress(97)
-            
+
             if results and "error" not in results:
                 try:
                     video_id = storage_manager.save_analysis_results(
@@ -554,16 +557,16 @@ Structure your entire response using the following markdown format, and do not i
                     st.session_state.current_video_id = video_id
                 except Exception as e:
                     st.warning(f"⚠️ Results generated but not saved to database: {e}")
-            
+
             progress_bar.progress(100)
             status_text.text("✅ All processing complete!")
             time.sleep(1)
-            
+
             progress_bar.empty()
             status_text.empty()
-            
+
             return results
-            
+
         except Exception as e:
             progress_bar.empty()
             status_text.empty()
@@ -651,9 +654,10 @@ def home_page():
     st.success("📊 **Engagement Scoring**: Predict content performance before publishing!")
     st.success("🎬 **Title Generator**: Auto-suggest 3 catchy titles for your videos and shorts! Pick one or edit your own.")
     st.success("🔄 **Multi-Model Support**: Switch between Gemini, Claude, and GPT models via admin config!")
-    
+    st.success("🎧 **Audio Podcast**: Convert your generated blogs into high-quality audio narration instantly!")
+
     st.divider()
-    
+
     # Updated: Show provider AND model info
     provider = llm_client.get_current_provider()
     model = llm_client.get_current_model()
@@ -661,7 +665,6 @@ def home_page():
         st.success(f"✅ AI Provider Active: **{provider.upper()}** (Model: `{model}`)")
     else:
         st.warning("⚠️ No AI providers configured. Please add API keys to `.env.local`")
-
 def creator_tool_page():
     """Renders the main tool for video analysis and content generation."""
     st.title("🛠️ Creator Catalyst Tool")
@@ -681,7 +684,7 @@ def creator_tool_page():
     provider = llm_client.get_current_provider()
     model = llm_client.get_current_model()
     credits_balance = credits_manager.get_balance()
-    
+
     col1, col2, col3 = st.columns(3)
     with col1:
         if provider != "none":
@@ -698,7 +701,7 @@ def creator_tool_page():
             st.caption(f"⏱️ Last: {last_used}")
 
     col1, col2, col3 = st.columns([2, 2, 1])
-    
+
     with col1:
         selected_platform = st.selectbox(
             "🎯 Target Platform:",
@@ -707,11 +710,11 @@ def creator_tool_page():
             help="This will adjust the tone and style of all generated content"
         )
         st.session_state.selected_platform = selected_platform
-    
+
     with col2:
         platform_info = PLATFORM_TONES[selected_platform]
         st.info(f"**{selected_platform}**: {platform_info['description']}")
-    
+
     with col3:
         enable_grounding = st.checkbox(
             "🔍 Fact-Grounding",
@@ -913,7 +916,7 @@ def creator_tool_page():
                                 key=f"download_{i}"
                             )
 
-        # TAB 2: Blog Post (ENHANCED with engagement scoring)
+        # TAB 2: Blog Post (ENHANCED with Audio Generation)
         with tabs[2]:
             st.header("Blog Post")
             st.caption(f"Written in {st.session_state.selected_platform} style")
@@ -928,8 +931,58 @@ def creator_tool_page():
                     st.markdown(results['blog_post_original'])
             else:
                 st.markdown(blog_content)
+            
+            # [NEW] Audio Podcast Generation
+            if blog_content and blog_content != 'No blog post generated.':
+                st.divider()
+                st.subheader("🎧 Audio Podcast")
+                st.markdown("Convert this blog post into a high-quality audio narration.")
+                
+                col_audio_1, col_audio_2 = st.columns([2, 1])
+                with col_audio_1:
+                    selected_voice = st.selectbox(
+                        "Select Voice", 
+                        options=list(AVAILABLE_VOICES.keys()),
+                        help="Choose the tone and gender for the narrator"
+                    )
+                
+                with col_audio_2:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    if st.button("🎙️ Generate Audio (1 Credit)", key="gen_audio", type="primary", use_container_width=True):
+                        # Credit check
+                        has_credits, balance, cost = credits_manager.has_sufficient_credits('audio_generation')
+                        # Fallback if 'audio_generation' isn't in DB yet: allow it (cost=1)
+                        if not has_credits and balance < 1:
+                            st.error(f"❌ Need 1 credit (have {balance})")
+                        else:
+                            with st.spinner("Generating audio podcast..."):
+                                audio_path = generate_audio_file(blog_content, selected_voice)
+                                if audio_path:
+                                    # Deduct credit (try/except in case operation key is missing in DB)
+                                    try:
+                                        credits_manager.deduct_credits(
+                                            'audio_generation',
+                                            description=f"Generated podcast ({selected_voice})"
+                                        )
+                                    except:
+                                        pass # Fail gracefully if key missing
+                                        
+                                    st.session_state['generated_audio'] = audio_path
+                                    st.success("✅ Audio generated successfully!")
+                
+                # Audio Player
+                if 'generated_audio' in st.session_state:
+                    st.audio(st.session_state['generated_audio'])
+                    
+                    with open(st.session_state['generated_audio'], "rb") as f:
+                        st.download_button(
+                            label="📥 Download Podcast (MP3)",
+                            data=f,
+                            file_name="podcast.mp3",
+                            mime="audio/mpeg"
+                        )
 
-            # NEW: Engagement scoring section
+            # Engagement scoring section
             st.divider()
             st.markdown("### 📊 Engagement Analysis")
             add_engagement_scoring_section(
@@ -937,7 +990,7 @@ def creator_tool_page():
                 st.session_state.selected_platform
             )
 
-            # NEW: Keywords section
+            # Keywords section
             if blog_content != 'No blog post generated.':
                 st.divider()
                 st.markdown("### 🔍 Keywords for SEO")
@@ -1127,10 +1180,10 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
         with tabs[6]:
             st.header("🔍 Keywords & SEO Optimization")
             st.markdown("Extract and optimize keywords from all generated content for better search visibility.")
-            
+
             # Extract keywords from all content types
             all_keywords = {}
-            
+
             # Blog keywords
             if results.get('blog_post') and results.get('blog_post') != 'No blog post generated.':
                 st.subheader("📝 Blog Post Keywords")
@@ -1141,9 +1194,9 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                     num_keywords=8
                 )
                 all_keywords['blog'] = blog_keywords
-            
+
             st.divider()
-            
+
             # Social Post keywords
             if results.get('social_post') and results.get('social_post') != 'No post generated.':
                 st.subheader("📱 Social Media Keywords")
@@ -1154,9 +1207,9 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                     num_keywords=8
                 )
                 all_keywords['social'] = social_keywords
-            
+
             st.divider()
-            
+
             # Shorts keywords (from first short idea)
             if results.get('shorts_ideas'):
                 st.subheader("⚡ Shorts Keywords")
@@ -1169,13 +1222,13 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                         num_keywords=8
                     )
                     all_keywords['shorts'] = shorts_keywords
-            
+
             st.divider()
-            
+
             # Export options
             if all_keywords:
                 st.markdown("### 📥 Export Keywords")
-                
+
                 # Keywords-only CSV
                 exporter = get_csv_exporter()
                 keywords_csv = exporter.export_keywords_csv(
@@ -1183,7 +1236,7 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                     platform=st.session_state.selected_platform,
                     title="Extracted Keywords"
                 )
-                
+
                 st.download_button(
                     label="📥 Download Keywords as CSV",
                     data=keywords_csv,
@@ -1191,7 +1244,7 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                     mime="text/csv",
                     use_container_width=True
                 )
-                
+
                 st.caption("💡 Use these keywords in: Meta titles, Meta descriptions, Image alt text, Hashtags (#), and Content tags")
 
         # TAB 7: Grounding Report
@@ -1318,7 +1371,6 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                                     st.metric("Score", f"{short_data['score'].overall_score}/100")
                                 with col2:
                                     st.metric("Best Platform", short_data['score'].recommended_platform)
-
 # ---- SIDEBAR + NAVIGATION + ROUTING LOGIC ----
 with st.sidebar:
     st.markdown("## 🚀 Creator Catalyst")
@@ -1336,12 +1388,13 @@ with st.sidebar:
     with st.expander("💰 Credit Costs"):
         st.caption("📹 Video Upload: 5 credits")
         st.caption("📝 Blog Post: 2 credits")
+        st.caption("🎧 Audio Podcast: 1 credit")
         st.caption("📱 Social Post: 1 credit")
         st.caption("✂️ Shorts Clip: 1 credit")
         st.caption("🎨 Thumbnail: 1 credit")
 
     st.divider()
-    
+
     # NEW: Admin AI Model Configuration
     with st.expander("🔧 Admin: AI Model Config", expanded=False):
         st.caption("Switch between AI providers/models")
@@ -1414,9 +1467,9 @@ with st.sidebar:
         st.caption(f"Content Pieces: {stats['total_contents']}")
     except:
         pass
-    
+
     st.divider()
-    
+
     # NEW: AI Usage Stats in Sidebar
     try:
         from src.database.ai_request_logger import get_ai_logger
