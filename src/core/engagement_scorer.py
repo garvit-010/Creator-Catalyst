@@ -5,8 +5,20 @@ Provides platform-specific recommendations and actionable insights.
 """
 
 import re
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
+
+# Download required NLTK data
+try:
+    nltk.data.find('sentiment/vader_lexicon.zip')
+except LookupError:
+    nltk.download('vader_lexicon', quiet=True)
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt', quiet=True)
 
 
 @dataclass
@@ -18,6 +30,9 @@ class EngagementScore:
     strengths: List[str]
     improvements: List[str]
     engagement_factors: Dict[str, float]  # Detailed factor breakdown
+    sentiment: Dict[str, float]  # Sentiment analysis results
+    readability_score: float  # Flesch-Kincaid Ease or similar
+    virality_score: float  # Predicted virality potential
     optimal_posting_time: Optional[str] = None
 
 
@@ -30,48 +45,57 @@ class EngagementScorer:
     # Platform characteristics and weights
     PLATFORM_WEIGHTS = {
         'Instagram': {
-            'visual_appeal': 0.25,
-            'hashtag_usage': 0.20,
-            'emoji_presence': 0.15,
-            'length_optimal': 0.15,
-            'call_to_action': 0.15,
-            'storytelling': 0.10
+            'visual_appeal': 0.20,
+            'hashtag_usage': 0.15,
+            'emoji_presence': 0.10,
+            'length_optimal': 0.10,
+            'call_to_action': 0.10,
+            'storytelling': 0.10,
+            'sentiment_impact': 0.15,
+            'virality_factor': 0.10
         },
         'Twitter/X': {
-            'brevity': 0.25,
-            'trending_potential': 0.20,
-            'hashtag_usage': 0.15,
-            'engagement_hooks': 0.20,
+            'brevity': 0.20,
+            'trending_potential': 0.15,
+            'hashtag_usage': 0.10,
+            'engagement_hooks': 0.15,
             'thread_worthy': 0.10,
-            'controversy_factor': 0.10
+            'controversy_factor': 0.10,
+            'sentiment_impact': 0.10,
+            'virality_factor': 0.10
         },
         'LinkedIn': {
-            'professionalism': 0.25,
-            'value_proposition': 0.25,
-            'thought_leadership': 0.20,
-            'length_optimal': 0.15,
+            'professionalism': 0.20,
+            'value_proposition': 0.20,
+            'thought_leadership': 0.15,
+            'length_optimal': 0.10,
             'call_to_action': 0.10,
-            'industry_relevance': 0.05
+            'industry_relevance': 0.05,
+            'readability_impact': 0.10,
+            'sentiment_impact': 0.10
         },
         'TikTok': {
-            'hook_strength': 0.30,
-            'trend_alignment': 0.25,
-            'emoji_presence': 0.15,
-            'brevity': 0.15,
-            'viral_potential': 0.15
+            'hook_strength': 0.25,
+            'trend_alignment': 0.20,
+            'emoji_presence': 0.10,
+            'brevity': 0.10,
+            'viral_potential': 0.20,
+            'sentiment_impact': 0.15
         },
         'YouTube': {
-            'storytelling': 0.30,
-            'seo_optimization': 0.20,
-            'value_proposition': 0.20,
-            'length_optimal': 0.15,
-            'call_to_action': 0.15
+            'storytelling': 0.25,
+            'seo_optimization': 0.15,
+            'value_proposition': 0.15,
+            'length_optimal': 0.10,
+            'call_to_action': 0.10,
+            'virality_factor': 0.15,
+            'sentiment_impact': 0.10
         }
     }
     
     def __init__(self):
         """Initialize the engagement scorer."""
-        pass
+        self.sia = SentimentIntensityAnalyzer()
     
     def score_content(
         self, 
@@ -92,6 +116,16 @@ class EngagementScorer:
         """
         # Analyze content characteristics
         factors = self._analyze_content_factors(content)
+        
+        # New Deep Metrics
+        sentiment = self._analyze_sentiment(content)
+        readability = self._analyze_readability(content)
+        virality = self._analyze_virality(content, factors)
+        
+        # Add deep metrics to factors for scoring
+        factors['sentiment_impact'] = sentiment['compound'] * 0.5 + 0.5  # Normalize to 0-1
+        factors['readability_impact'] = readability / 100.0
+        factors['virality_factor'] = virality
         
         # Calculate platform-specific scores
         platform_scores = {}
@@ -118,9 +152,69 @@ class EngagementScorer:
             strengths=strengths,
             improvements=improvements,
             engagement_factors=factors,
+            sentiment=sentiment,
+            readability_score=readability,
+            virality_score=virality * 100,
             optimal_posting_time=self._suggest_posting_time(recommended_platform)
         )
     
+    def _analyze_sentiment(self, content: str) -> Dict[str, float]:
+        """Perform sentiment analysis on content."""
+        return self.sia.polarity_scores(content)
+
+    def _analyze_readability(self, content: str) -> float:
+        """Calculate a basic Flesch Reading Ease score."""
+        sentences = nltk.sent_tokenize(content)
+        words = content.split()
+        
+        if not words or not sentences:
+            return 0.0
+            
+        avg_sentence_length = len(words) / len(sentences)
+        
+        # Simple syllable counting (approximate)
+        def count_syllables(word):
+            word = word.lower()
+            count = 0
+            vowels = "aeiouy"
+            if word[0] in vowels:
+                count += 1
+            for index in range(1, len(word)):
+                if word[index] in vowels and word[index - 1] not in vowels:
+                    count += 1
+            if word.endswith("e"):
+                count -= 1
+            if count == 0:
+                count = 1
+            return count
+            
+        total_syllables = sum(count_syllables(w) for w in words)
+        avg_syllables_per_word = total_syllables / len(words)
+        
+        # Flesch Reading Ease formula
+        score = 206.835 - (1.015 * avg_sentence_length) - (84.6 * avg_syllables_per_word)
+        return max(min(score, 100.0), 0.0)
+
+    def _analyze_virality(self, content: str, factors: Dict[str, float]) -> float:
+        """Predict virality potential based on multiple factors."""
+        virality_score = 0.0
+        
+        # Base from existing viral potential
+        virality_score += factors.get('viral_potential', 0) * 0.4
+        
+        # Hook strength is crucial for virality
+        virality_score += factors.get('hook_strength', 0) * 0.3
+        
+        # Controversy/High emotion (sentiment extremity)
+        sentiment = self._analyze_sentiment(content)
+        extremity = abs(sentiment['compound'])
+        virality_score += extremity * 0.2
+        
+        # Brevity (short, punchy content often goes viral)
+        virality_score += factors.get('brevity', 0) * 0.1
+        
+        return min(virality_score, 1.0)
+
     def _analyze_content_factors(self, content: str) -> Dict[str, float]:
         """
         Analyze various engagement factors in content.

@@ -62,7 +62,13 @@ def render_engagement_score_card(score: EngagementScore, show_details: bool = Tr
         st.divider()
         
         # Tabs for different views
-        tabs = st.tabs(["💪 Strengths", "📈 Improvements", "📊 Platform Comparison", "🔍 Deep Dive"])
+        tabs = st.tabs([
+            "💪 Strengths", 
+            "📈 Improvements", 
+            "📊 Platform Comparison", 
+            "🔍 Deep Dive",
+            "🧠 Deep Insights"
+        ])
         
         # Strengths tab
         with tabs[0]:
@@ -146,6 +152,60 @@ def render_engagement_score_card(score: EngagementScore, show_details: bool = Tr
                 
                 st.progress(value)
                 st.markdown("")  # Spacing
+
+        # Deep Insights tab
+        with tabs[4]:
+            st.markdown("### 🧠 Advanced Content Metrics")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                # Sentiment Meter
+                st.markdown("#### 😊 Sentiment")
+                compound = score.sentiment['compound']
+                if compound >= 0.05:
+                    label = "Positive"
+                    icon = "🟢"
+                elif compound <= -0.05:
+                    label = "Negative"
+                    icon = "🔴"
+                else:
+                    label = "Neutral"
+                    icon = "⚪"
+                
+                st.metric("Tone", label, delta=f"{compound:.2f}")
+                st.caption(f"Pos: {score.sentiment['pos']:.2f} | Neu: {score.sentiment['neu']:.2f} | Neg: {score.sentiment['neg']:.2f}")
+
+            with col2:
+                # Readability
+                st.markdown("#### 📖 Readability")
+                read_score = score.readability_score
+                if read_score >= 80:
+                    r_label = "Easy"
+                elif read_score >= 60:
+                    r_label = "Standard"
+                elif read_score >= 30:
+                    r_label = "Difficult"
+                else:
+                    r_label = "Very Academic"
+                
+                st.metric("Ease Score", f"{read_score:.1f}", help="Flesch Reading Ease Score (0-100)")
+                st.progress(read_score / 100)
+                st.caption(f"Classification: **{r_label}**")
+
+            with col3:
+                # Virality
+                st.markdown("#### 🚀 Virality")
+                v_score = score.virality_score
+                st.metric("Viral Potential", f"{v_score:.1f}%")
+                st.progress(v_score / 100)
+                
+                if v_score >= 80:
+                    st.success("High Potential!")
+                elif v_score >= 50:
+                    st.info("Good Potential")
+                else:
+                    st.caption("Low Virality Predicted")
 
 
 def render_compact_score(score: EngagementScore):

@@ -145,6 +145,7 @@ def render_ai_logs_dashboard():
     
     # ========== TABS FOR DETAILED VIEWS ==========
     tabs = st.tabs([
+        "📊 Visual Insights",
         "📈 Analytics",
         "📜 Request History",
         "🔧 By Provider",
@@ -152,8 +153,37 @@ def render_ai_logs_dashboard():
         "📅 Daily Breakdown"
     ])
     
-    # ========== TAB 1: ANALYTICS ==========
+    # ========== TAB 0: VISUAL INSIGHTS ==========
     with tabs[0]:
+        st.markdown("### 📊 Performance & Usage Trends")
+        
+        if analytics['daily_breakdown']:
+            df_daily = pd.DataFrame(analytics['daily_breakdown'])
+            df_daily['date'] = pd.to_datetime(df_daily['date'])
+            df_daily = df_daily.sort_values('date')
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### 💳 Credit Usage Over Time")
+                st.area_chart(df_daily.set_index('date')['credits'])
+                
+            with col2:
+                st.markdown("#### 📝 Content Output (Requests)")
+                st.bar_chart(df_daily.set_index('date')['requests'])
+                
+            st.divider()
+            
+            st.markdown("#### ⚡ System Performance (Avg Response Time)")
+            # We need to get avg response time per day, but the current daily breakdown doesn't have it.
+            # For now, let's show tokens as a proxy for complexity or just use what we have.
+            st.line_chart(df_daily.set_index('date')['tokens'])
+            st.caption("Token consumption as a proxy for processing volume")
+        else:
+            st.info("No trend data available for the selected time range.")
+
+    # ========== TAB 1: ANALYTICS ==========
+    with tabs[1]:
         st.markdown("### 📈 Performance Analytics")
         
         col1, col2 = st.columns(2)
