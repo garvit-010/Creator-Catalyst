@@ -6,8 +6,17 @@ Provides command-line tools for managing the database.
 
 import argparse
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
+
+# --- FIX: Add project root to sys.path ---
+# This ensures Python can find the 'src' folder
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Import application modules
 from src.database.credits_manager import get_credits_manager
 from src.database.database import get_database, Database
 from src.database.storage_manager import get_storage_manager
@@ -142,8 +151,10 @@ def cmd_delete(args):
 
 
 def cmd_search(args):
-    """Search videos by filename."""
+    """Search videos by filename OR semantic content."""
     storage = get_storage_manager(args.database)
+    
+    # This queries both 'filename' and the new 'searchable_text' metadata blob
     videos = storage.db.search_videos(args.query, limit=50)
     
     if not videos:
@@ -151,7 +162,7 @@ def cmd_search(args):
         return
     
     print("=" * 100)
-    print(f"SEARCH RESULTS FOR: '{args.query}'")
+    print(f"SEMANTIC SEARCH RESULTS FOR: '{args.query}'")
     print("=" * 100)
     print(f"{'ID':<5} {'Filename':<40} {'Platform':<12} {'Status':<12} {'Uploaded':<20}")
     print("=" * 100)
@@ -162,7 +173,7 @@ def cmd_search(args):
               f"{video.processing_status:<12} {uploaded.strftime('%Y-%m-%d %H:%M'):<20}")
     
     print("=" * 100)
-    print(f"Found: {len(videos)} videos")
+    print(f"Found: {len(videos)} videos (Matched via Filename or Generated Content)")
 
 
 def cmd_recent(args):
@@ -364,7 +375,6 @@ Examples:
     parser_cleanup = subparsers.add_parser('cleanup', help='Clean up orphaned records')
     parser_cleanup.add_argument('-f', '--force', action='store_true', help='Force without confirmation')
     parser_cleanup.set_defaults(func=cmd_cleanup)
-    # ... (keep existing subparsers: init, stats, list, show, export, import, delete, search, recent, cleanup)
 
     # NEW: credits-balance
     parser_credits_bal = subparsers.add_parser('credits-balance', help='Show credit balance')
