@@ -114,6 +114,19 @@ class EngagementScorer:
         Returns:
             EngagementScore with detailed analysis
         """
+        if not content or not content.strip():
+            return EngagementScore(
+                overall_score=0,
+                platform_scores={p: 0 for p in self.PLATFORM_WEIGHTS.keys()},
+                recommended_platform=list(self.PLATFORM_WEIGHTS.keys())[0],
+                strengths=[],
+                improvements=["Add content to get an engagement score"],
+                engagement_factors={},
+                sentiment={'neg': 0.0, 'neu': 0.0, 'pos': 0.0, 'compound': 0.0},
+                readability_score=0.0,
+                virality_score=0.0
+            )
+
         # Analyze content characteristics
         factors = self._analyze_content_factors(content)
         

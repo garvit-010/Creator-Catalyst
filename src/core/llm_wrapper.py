@@ -898,6 +898,52 @@ Your video upload to the Gemini API failed. This is typically caused by configur
         elif self.current_provider:
             return self.current_provider.upper()
         return "No Provider"
+
+    def generate(self, prompt, retries=3, user_id="default_user"):
+        """Alias for generate_text for compatibility."""
+        return self.generate_text(prompt, retries, user_id)
+
+    def _extract_json(self, text: str) -> dict:
+        """
+        Utility to extract JSON from LLM responses that might contain markdown or extra text.
+        """
+        try:
+            # Clean response
+            cleaned = text.strip()
+
+            # Remove markdown code blocks if present
+            if "```" in cleaned:
+                # Try to find json block first
+                json_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+                if json_match:
+                    cleaned = json_match.group(1).strip()
+                else:
+                    cleaned = cleaned.split("```")[1].strip()
+
+            # Remove 'json' prefix if present (sometimes models do this outside code blocks)
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+
+            # Find the first '[' or '{' and last ']' or '}'
+            start_idx = -1
+            for i, char in enumerate(cleaned):
+                if char in "{[":
+                    start_idx = i
+                    break
+            
+            end_idx = -1
+            for i, char in enumerate(reversed(cleaned)):
+                if char in "}]":
+                    end_idx = len(cleaned) - i
+                    break
+            
+            if start_idx != -1 and end_idx != -1:
+                cleaned = cleaned[start_idx:end_idx]
+
+            return json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError, IndexError, AttributeError) as e:
+            print(f"⚠️ Failed to extract JSON from response: {e}")
+            return {}
     
     def get_last_used_display(self):
         """Returns a formatted display string for the last used provider and model."""

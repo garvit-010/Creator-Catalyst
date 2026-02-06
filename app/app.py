@@ -403,10 +403,58 @@ def clip_video_ffmpeg(video_path, start_time_str, end_time_str):
         st.error(f"Failed to clip video: {e}")
         return None
 
+def compress_video_if_needed(video_path, threshold_mb=50):
+    """
+    Compresses video to 720p if larger than threshold_mb.
+    Returns: (path_to_use, was_compressed)
+    """
+    try:
+        file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
+        
+        # If file is small enough, skip compression
+        if file_size_mb < threshold_mb:
+            return video_path, False
+
+        # Create output filename (e.g., video_optimized.mp4)
+        directory = os.path.dirname(video_path)
+        filename = os.path.basename(video_path)
+        name, ext = os.path.splitext(filename)
+        output_path = os.path.join(directory, f"{name}_optimized.mp4")
+
+        # FFmpeg command from Issue #59
+        # Scale to 720p, CRF 28 (compressed), Preset Fast
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", video_path,
+            "-vf", "scale=-1:720",
+            "-c:v", "libx264",
+            "-crf", "28",
+            "-preset", "fast",
+            "-c:a", "aac",  # Copy or encode audio
+            output_path
+        ]
+        
+        # Run compression (capture output to avoid console spam)
+        subprocess.run(cmd, check=True, capture_output=True)
+        
+        # Verify output exists and is actually smaller
+        if os.path.exists(output_path):
+            new_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+            # If compression somehow made it bigger (rare), keep original
+            if new_size_mb > file_size_mb:
+                return video_path, False
+            return output_path, True
+            
+        return video_path, False
+        
+    except Exception as e:
+        # If ffmpeg fails, log it but don't crash the app—just use original
+        print(f"⚠️ Compression failed: {e}")
+        return video_path, False
+
 def process_video_with_progress(uploaded_file, video_path, target_platform="General", enable_grounding=True):
     """
-    Uploads and analyzes video with progress tracking.
-    Shows progress bar during upload and processing stages.
+    Uploads, compresses (if needed), and analyzes video with progress tracking.
     """
     progress_container = st.container()
     
@@ -415,7 +463,7 @@ def process_video_with_progress(uploaded_file, video_path, target_platform="Gene
         status_text = st.empty()
         
         try:
-            # Stage 1: File Upload (0-20%)
+            # Stage 1: File Upload to Server (0-20%)
             status_text.text("📤 Uploading video file...")
             progress_bar.progress(10)
             
@@ -438,36 +486,49 @@ def process_video_with_progress(uploaded_file, video_path, target_platform="Gene
             
             status_text.text(f"✅ Upload complete ({file_size_mb:.1f} MB)")
             progress_bar.progress(20)
-            time.sleep(0.5)
-            
-            # Stage 2: Preprocessing (20-30%)
-            status_text.text("🔄 Preprocessing video...")
-            progress_bar.progress(25)
             time.sleep(0.3)
             
-            if not os.path.exists(video_path):
-                raise Exception("Video file not found after upload")
+            # [NEW] Stage 2: Intelligent Compression (20-40%)
+            final_video_path = video_path
             
-            progress_bar.progress(30)
-            status_text.text("✅ Preprocessing complete")
-            time.sleep(0.3)
-            
-            # Stage 3: AI Upload to Gemini (30-50%)
+            if file_size_mb > 50:  # Threshold: 50MB
+                status_text.text(f"📉 Optimizing large video ({file_size_mb:.1f} MB) for faster AI processing...")
+                progress_bar.progress(25)
+                
+                # Run the compression helper
+                compressed_path, was_compressed = compress_video_if_needed(video_path)
+                
+                if was_compressed:
+                    final_video_path = compressed_path
+                    new_size = os.path.getsize(final_video_path) / (1024 * 1024)
+                    status_text.text(f"✨ Optimization complete: {file_size_mb:.1f}MB ➝ {new_size:.1f}MB")
+                    progress_bar.progress(40)
+                    time.sleep(0.5)
+                else:
+                    status_text.text("⏩ Skipping optimization (already optimal or ffmpeg skipped)")
+                    progress_bar.progress(40)
+            else:
+                status_text.text("✅ Video size is optimal. Skipping compression.")
+                progress_bar.progress(40)
+
+            # Stage 3: AI Upload to Gemini (40-60%)
             status_text.text("☁️ Uploading to AI service...")
-            progress_bar.progress(35)
+            progress_bar.progress(45)
             
-            video_file, provider = llm_client.upload_video_file(video_path)
+            # Use final_video_path (optimized version) instead of original video_path
+            video_file, provider = llm_client.upload_video_file(final_video_path)
             
             if not video_file:
-                progress_bar.progress(50)
+                progress_bar.progress(60)
                 status_text.text("⚠️ Using fallback mode (AI upload failed)")
                 time.sleep(1)
             else:
-                progress_bar.progress(50)
+                progress_bar.progress(60)
                 status_text.text(f"✅ Uploaded to {provider.upper()}")
                 time.sleep(0.3)
             
-            # Stage 4: AI Analysis (50-90%)
+            # Stage 4: AI Analysis (60-90%)
+            # ... (Prompt generation code remains the same as before) ...
             style_modifier = get_platform_prompt_modifier(target_platform)
             
             analysis_prompt = f"""
@@ -490,7 +551,6 @@ Structure your entire response using the following markdown format, and do not i
 ### Captions
 ```srt
 (Your generated SRT captions here)
-```
 
 ### Shorts Ideas
 (Provide at least 5 ideas here, each formatted exactly as follows. Ensure the tone and topics align with {target_platform} style.)
@@ -515,9 +575,10 @@ Structure your entire response using the following markdown format, and do not i
 """
             
             status_text.text(f"🤖 Analyzing video with {provider.upper() if video_file else 'fallback'}...")
-            progress_bar.progress(60)
+            progress_bar.progress(65)
 
-            for i in range(60, 90, 5):
+            # Simulated progress for user feedback
+            for i in range(65, 90, 5):
                 time.sleep(0.5)
                 progress_bar.progress(i)
                 if i == 70:
@@ -549,8 +610,9 @@ Structure your entire response using the following markdown format, and do not i
 
             if results and "error" not in results:
                 try:
+                    # Save using the final (possibly compressed) path
                     video_id = storage_manager.save_analysis_results(
-                        video_path=video_path,
+                        video_path=final_video_path,
                         results=results,
                         platform=target_platform,
                         grounding_enabled=enable_grounding
