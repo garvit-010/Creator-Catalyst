@@ -69,9 +69,11 @@ class AIRequestLogger:
     @contextmanager
     def get_connection(self):
         """Context manager for database connections."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=30)
         conn.row_factory = sqlite3.Row
         try:
+            # Enable WAL mode for better concurrency
+            conn.execute("PRAGMA journal_mode=WAL")
             yield conn
             conn.commit()
         except Exception as e:
@@ -189,10 +191,10 @@ class AIRequestLogger:
             
             request_id = cursor.lastrowid
             
-            # Update rate limit tracking
-            self._update_rate_limit_window(user_id, tokens_used, cost_credits)
-            
-            return request_id
+        # Update rate limit tracking
+        self._update_rate_limit_window(user_id, tokens_used, cost_credits)
+        
+        return request_id
     
     def _calculate_usd_cost(self, provider: str, tokens: int, operation: str) -> float:
         """Calculate approximate USD cost for a request."""
@@ -461,9 +463,12 @@ class AIRequestLogger:
 # Singleton instance
 _logger_instance = None
 
-def get_ai_logger(db_path: str = "creator_catalyst.db") -> AIRequestLogger:
+def get_ai_logger(db_path: Optional[str] = None) -> AIRequestLogger:
     """Get or create AI logger singleton instance."""
     global _logger_instance
     if _logger_instance is None:
+        if db_path is None:
+            import os
+            db_path = os.getenv('DATABASE_PATH', "creator_catalyst.db")
         _logger_instance = AIRequestLogger(db_path)
     return _logger_instance

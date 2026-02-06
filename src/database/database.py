@@ -101,9 +101,12 @@ class Database:
     @contextmanager
     def get_connection(self):
         """Context manager for database connections."""
-        conn = sqlite3.connect(str(self.db_path))
+        conn = sqlite3.connect(str(self.db_path), timeout=30)
         conn.row_factory = sqlite3.Row  # Enable column access by name
+        conn.execute("PRAGMA foreign_keys = ON") # Enable cascade deletes
         try:
+            # Enable WAL mode for better concurrency
+            conn.execute("PRAGMA journal_mode=WAL")
             yield conn
             conn.commit()
         except Exception as e:
@@ -602,9 +605,12 @@ class Database:
 # Singleton instance
 _db_instance = None
 
-def get_database(db_path: str = "creator_catalyst.db") -> Database:
+def get_database(db_path: Optional[str] = None) -> Database:
     """Get or create database singleton instance."""
     global _db_instance
     if _db_instance is None:
+        if db_path is None:
+            import os
+            db_path = os.getenv('DATABASE_PATH', "creator_catalyst.db")
         _db_instance = Database(db_path)
     return _db_instance
