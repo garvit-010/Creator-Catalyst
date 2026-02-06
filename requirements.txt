@@ -17,3 +17,4 @@ nltk>=3.8.1
 anthropic>=0.25.0
 sentence-transformers>=3.0.0
 numpy>=2.1.0
+textblob

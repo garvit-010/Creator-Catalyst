@@ -44,7 +44,7 @@ from src.ui.components.title_ui import (
 )
 # [NEW] Import Audio Generator
 from src.core.audio_generator import generate_audio_file, AVAILABLE_VOICES
-
+from src.core.sentiment_analyzer import SentimentAnalyzer
 
 def render_credits_page(credits_manager):
     """Main credits management page."""
@@ -312,6 +312,7 @@ load_dotenv(env_path)
 llm_client = LLMWrapper()
 storage_manager = get_storage_manager()
 credits_manager = get_credits_manager()
+sentiment_analyzer = SentimentAnalyzer()
 
 HF_TOKEN = os.getenv('HF_TOKEN')
 
@@ -818,7 +819,8 @@ def creator_tool_page():
             "🎬 Title Generator",  # NEW: Title suggestions tab
             "🔍 Keywords & SEO",
             "📊 Grounding Report",
-            "📈 Engagement Analytics"
+            "📈 Engagement Analytics",
+            "🎢 Emotional Arc"
         ])
 
         # TAB 0: Captions
@@ -1371,6 +1373,46 @@ Secret, Hidden, Ultimate, Proven, Shocking, Essential, Powerful, Game-changing, 
                                     st.metric("Score", f"{short_data['score'].overall_score}/100")
                                 with col2:
                                     st.metric("Best Platform", short_data['score'].recommended_platform)
+        
+        # TAB 9: Emotional Arc (NEW)
+        with tabs[9]:
+            st.header("🎢 Emotional Arc")
+            st.markdown("Visualize the emotional journey of your video to identify peaks and valleys.")
+            
+            srt_content = results.get('captions')
+            
+            if not srt_content or srt_content == "No captions generated.":
+                st.info("⚠️ No transcript available to analyze. Please generate content first.")
+            else:
+                with st.spinner("Calculating sentiment arc..."):
+                    # User controls granularity
+                    granularity = st.select_slider(
+                        "Resolution (Chunk Size)",
+                        options=[10, 30, 60, 120],
+                        value=30,
+                        format_func=lambda x: f"{x} seconds"
+                    )
+                    
+                    df = sentiment_analyzer.analyze_emotional_arc(srt_content, chunk_duration=granularity)
+                    
+                    if df is not None and not df.empty:
+                        # Area Chart
+                        st.area_chart(
+                            df, 
+                            x='Time', 
+                            y='Sentiment',
+                            color="#FF4B4B", # Streamlit Red
+                            height=300
+                        )
+                        
+                        st.caption("Values range from **-1.0 (Negative)** to **+1.0 (Positive)**. Peaks represent excitement or positive statements; valleys represent conflict or seriousness.")
+                        
+                        # Show data table for details
+                        with st.expander("See Raw Data"):
+                            st.dataframe(df)
+                    else:
+                        st.warning("Could not parse transcript for sentiment analysis.")
+
 # ---- SIDEBAR + NAVIGATION + ROUTING LOGIC ----
 with st.sidebar:
     st.markdown("## 🚀 Creator Catalyst")
