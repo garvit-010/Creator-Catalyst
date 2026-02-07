@@ -7,9 +7,13 @@ import os
 import json
 import zipfile
 import tempfile
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 from src.database.database import get_database, Database, Video, ContentOutput, GroundingReport
 from src.core.engagement_scorer import get_engagement_scorer, EngagementScore
@@ -25,7 +29,7 @@ class StorageManager:
         """Initialize storage manager with database connection."""
         self.db = get_database(db_path)
         self.scorer = get_engagement_scorer()
-        print(f"✅ Storage manager initialized")
+        logger.info("Storage manager initialized")
 
     def save_analysis_results(
         self,
@@ -115,7 +119,7 @@ class StorageManager:
         if results.get("grounding_metadata"):
             self._save_grounding_report(video_id, results["grounding_metadata"])
 
-        print(f"✅ All results saved for video ID: {video_id}")
+        logger.info(f"All results saved for video ID: {video_id}")
         return video_id
 
     def _save_captions(self, video_id: int, captions: str):
@@ -419,7 +423,8 @@ class StorageManager:
     def delete_video_and_content(self, video_id: int):
         """Delete video and all associated content."""
         self.db.delete_video(video_id)
-        print(f"✅ Video {video_id} and all content deleted")
+        logger.info(f"Video {video_id} and all associated content deleted")
+        return True
 
     def get_statistics(self) -> Dict:
         """Get overall statistics."""
@@ -442,7 +447,8 @@ class StorageManager:
         with open(export_path, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
-        print(f"✅ Results exported to: {export_path}")
+        logger.info(f"Results exported successfully to: {export_path}")
+        return export_path
 
     def import_video_results(self, json_path: str) -> int:
         """
@@ -494,7 +500,7 @@ class StorageManager:
             ]
             self._save_thumbnail_ideas(video_id, ideas)
 
-        print(f"✅ Results imported with video ID: {video_id}")
+        logger.info(f"Results imported successfully with video ID: {video_id}")
         return video_id
 
     def export_video_toolkit_zip(
@@ -632,7 +638,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                     json.dumps(report, indent=2, ensure_ascii=False),
                 )
 
-        print(f"✅ Toolkit ZIP created: {output_path}")
+        logger.info(f"Toolkit ZIP created successfully at: {output_path}")
         return output_path
 
 

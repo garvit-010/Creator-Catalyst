@@ -4,10 +4,14 @@ Handles credit tracking, deduction, and validation for monetization.
 """
 
 import sqlite3
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Tuple
 from contextlib import contextmanager
 from pathlib import Path
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 class CreditsManager:
@@ -94,7 +98,7 @@ class CreditsManager:
                 VALUES ('default_user', ?, ?)
             """, (self.DEFAULT_CREDITS, self.DEFAULT_CREDITS))
             
-            print(f"✅ Credits system initialized")
+            logger.info("Credits system initialized")
     
     def get_balance(self, user_id: str = 'default_user') -> int:
         """Get current credit balance for user."""
@@ -149,7 +153,7 @@ class CreditsManager:
         has_credits, current_balance, _ = self.has_sufficient_credits(operation, user_id)
         
         if not has_credits:
-            print(f"❌ Insufficient credits: need {cost}, have {current_balance}")
+            logger.warning(f"Insufficient credits for user {user_id}: need {cost}, have {current_balance}")
             return False, current_balance
         
         with self.get_connection() as conn:
@@ -178,7 +182,7 @@ class CreditsManager:
                 ) VALUES (?, 'debit', ?, ?, ?, ?)
             """, (user_id, cost, new_balance, operation, description or f"{operation} operation"))
             
-            print(f"✅ Deducted {cost} credits for {operation}. New balance: {new_balance}")
+            logger.info(f"Deducted {cost} credits for {operation} (user: {user_id}). New balance: {new_balance}")
             return True, new_balance
     
     def add_credits(
@@ -223,7 +227,7 @@ class CreditsManager:
                 ) VALUES (?, 'credit', ?, ?, ?)
             """, (user_id, amount, new_balance, description))
             
-            print(f"✅ Added {amount} credits. New balance: {new_balance}")
+            logger.info(f"Added {amount} credits for user {user_id}. New balance: {new_balance}")
             return new_balance
     
     def get_transaction_history(
@@ -319,7 +323,8 @@ class CreditsManager:
                 ) VALUES (?, 'credit', ?, ?, 'Credits reset')
             """, (user_id, new_balance, new_balance))
             
-            print(f"✅ Credits reset to {new_balance}")
+            logger.info(f"Credits reset to {new_balance} for user {user_id}")
+            return new_balance
 
 
 # Singleton instance

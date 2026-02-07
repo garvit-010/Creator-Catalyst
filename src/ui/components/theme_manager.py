@@ -1,7 +1,11 @@
 import os
 import json
+import logging
 import streamlit as st
 from pathlib import Path
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 class ThemeManager:
@@ -30,7 +34,7 @@ class ThemeManager:
                     config = json.load(f)
                     return config.get("theme", "light")
         except Exception as e:
-            print(f"Error loading theme config: {e}")
+            logger.error(f"Error loading theme config: {e}")
         return "light"
 
     def save_theme(self, theme: str) -> bool:
@@ -42,7 +46,7 @@ class ThemeManager:
             st.session_state.theme = theme
             return True
         except Exception as e:
-            print(f"Error saving theme config: {e}")
+            logger.error(f"Error saving theme config: {e}")
             return False
 
     def get_theme_css(self, theme: str) -> str:

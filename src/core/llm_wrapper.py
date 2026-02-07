@@ -2,11 +2,15 @@ import os
 import json
 import time
 import re
+import logging
 import google.generativeai as genai
 from openai import OpenAI, OpenAIError
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Import Anthropic for Claude support
 try:
@@ -14,7 +18,7 @@ try:
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
-    print("⚠️ Anthropic package not installed. Install with: pip install anthropic")
+    logger.warning("Anthropic package not installed. Install with: pip install anthropic")
 
 # Import fact-grounding system
 try:
@@ -22,7 +26,7 @@ try:
     GROUNDING_AVAILABLE = True
 except ImportError:
     GROUNDING_AVAILABLE = False
-    print("⚠️ Fact-grounding module not found. Install fact_grounding.py for validation.")
+    logger.warning("Fact-grounding module not found. Install fact_grounding.py for validation.")
 
 # Import AI request logger
 try:
@@ -30,7 +34,7 @@ try:
     LOGGING_AVAILABLE = True
 except ImportError:
     LOGGING_AVAILABLE = False
-    print("⚠️ AI request logger not found. Logging disabled.")
+    logger.warning("AI request logger not found. Logging disabled.")
 
 # Load environment variables
 env_path = Path(__file__).parent.parent / '.env.local'
@@ -82,11 +86,11 @@ class LLMWrapper:
                 if self.primary_provider == "gemini" or not self.current_provider:
                     self.current_provider = "gemini"
                     self.current_model = self.gemini_model_name
-                print(f"✅ Gemini initialized successfully (model: {self.gemini_model_name})")
+                logger.info(f"Gemini initialized successfully (model: {self.gemini_model_name})")
             except Exception as e:
-                print(f"❌ Failed to initialize Gemini: {e}")
+                logger.error(f"Failed to initialize Gemini: {e}")
         else:
-            print("⚠️ GOOGLE_API_KEY not found in environment")
+            logger.warning("GOOGLE_API_KEY not found in environment")
         
         # Configure Claude/Anthropic
         self.claude_client = None
@@ -97,11 +101,11 @@ class LLMWrapper:
                 if self.primary_provider == "claude" or (not self.current_provider and self.primary_provider == "claude"):
                     self.current_provider = "claude"
                     self.current_model = self.claude_model_name
-                print(f"✅ Claude initialized successfully (model: {self.claude_model_name})")
+                logger.info(f"Claude initialized successfully (model: {self.claude_model_name})")
             except Exception as e:
-                print(f"❌ Failed to initialize Claude: {e}")
+                logger.error(f"Failed to initialize Claude: {e}")
         elif self.anthropic_api_key and not ANTHROPIC_AVAILABLE:
-            print("⚠️ ANTHROPIC_API_KEY found but anthropic package not installed")
+            logger.warning("ANTHROPIC_API_KEY found but anthropic package not installed")
         
         # Configure OpenAI / Ollama Client
         self.openai_client = None
@@ -114,9 +118,9 @@ class LLMWrapper:
                 if self.primary_provider == "openai" or (not self.current_provider and self.primary_provider == "openai"):
                     self.current_provider = "openai"
                     self.current_model = self.openai_model
-                print(f"✅ OpenAI initialized successfully (model: {self.openai_model})")
+                logger.info(f"OpenAI initialized successfully (model: {self.openai_model})")
             except Exception as e:
-                print(f"❌ Failed to initialize OpenAI: {e}")
+                logger.error(f"Failed to initialize OpenAI: {e}")
                 
         elif os.getenv('USE_OLLAMA', 'false').lower() == 'true':
             try:
@@ -128,9 +132,9 @@ class LLMWrapper:
                 if self.primary_provider == "ollama" or not self.current_provider:
                     self.current_provider = "ollama"
                     self.current_model = self.openai_model
-                print(f"✅ Ollama initialized successfully (model: {self.openai_model})")
+                logger.info(f"Ollama initialized successfully (model: {self.openai_model})")
             except Exception as e:
-                print(f"❌ Failed to initialize Ollama: {e}")
+                logger.error(f"Failed to initialize Ollama: {e}")
         
         # Set to primary provider if available
         self._set_primary_provider()
@@ -159,21 +163,21 @@ class LLMWrapper:
         
         if provider == "gemini":
             if not self.gemini_model:
-                print(f"❌ Cannot switch to Gemini: not initialized")
+                logger.error(f"Cannot switch to Gemini: not initialized")
                 return False
             if model and model in self.SUPPORTED_MODELS['gemini']:
                 try:
                     self.gemini_model = genai.GenerativeModel(model)
                     self.gemini_model_name = model
                 except Exception as e:
-                    print(f"❌ Failed to switch Gemini model: {e}")
+                    logger.error(f"Failed to switch Gemini model: {e}")
                     return False
             self.current_provider = "gemini"
             self.current_model = self.gemini_model_name
             
         elif provider == "claude":
             if not self.claude_client:
-                print(f"❌ Cannot switch to Claude: not initialized")
+                logger.error(f"Cannot switch to Claude: not initialized")
                 return False
             if model and model in self.SUPPORTED_MODELS['claude']:
                 self.claude_model_name = model
@@ -182,7 +186,7 @@ class LLMWrapper:
             
         elif provider == "openai":
             if not self.openai_client or not self.openai_api_key:
-                print(f"❌ Cannot switch to OpenAI: not initialized")
+                logger.error(f"Cannot switch to OpenAI: not initialized")
                 return False
             if model and model in self.SUPPORTED_MODELS['openai']:
                 self.openai_model = model
@@ -191,17 +195,17 @@ class LLMWrapper:
             
         elif provider == "ollama":
             if not self.openai_client:
-                print(f"❌ Cannot switch to Ollama: not initialized")
+                logger.error(f"Cannot switch to Ollama: not initialized")
                 return False
             if model:
                 self.openai_model = model
             self.current_provider = "ollama"
             self.current_model = self.openai_model
         else:
-            print(f"❌ Unknown provider: {provider}")
+            logger.error(f"Unknown provider: {provider}")
             return False
         
-        print(f"✅ Switched to {self.current_provider.upper()} (model: {self.current_model})")
+        logger.info(f"Switched to {self.current_provider.upper()} (model: {self.current_model})")
         return True
     
     def get_available_providers(self) -> dict:
@@ -259,9 +263,10 @@ class LLMWrapper:
         )
         
         if not is_allowed:
-            print(f"⚠️ Rate limit exceeded for user {user_id}")
-            print(f"   Requests: {stats['requests_used']}/100")
-            print(f"   Tokens: {stats['tokens_used']}/1,000,000")
+            logger.warning(f"Rate limit exceeded for user {user_id}", extra={"extra_data": {
+                "requests_used": stats['requests_used'],
+                "tokens_used": stats['tokens_used']
+            }})
         
         return is_allowed
 
@@ -301,20 +306,19 @@ class LLMWrapper:
             return None, None
         
         if not self.gemini_model:
-            print("❌ Gemini not available for video upload")
+            logger.error("Gemini not available for video upload")
             return None, None
         
         if not self.google_api_key:
-            print("❌ GOOGLE_API_KEY not configured")
+            logger.error("GOOGLE_API_KEY not configured")
             return None, None
         
         if not os.path.exists(file_path):
-            print(f"❌ File not found: {file_path}")
+            logger.error(f"File not found: {file_path}")
             return None, None
         
         file_size_mb = os.path.getsize(file_path) / (1024*1024)
-        print(f"📤 Uploading video: {file_path}")
-        print(f"   File size: {file_size_mb:.2f} MB")
+        logger.info(f"Uploading video: {file_path} (Size: {file_size_mb:.2f} MB)")
         
         start_time = time.time()
         success = False
@@ -322,7 +326,7 @@ class LLMWrapper:
         
         for attempt in range(retries):
             try:
-                print(f"   Attempt {attempt + 1}/{retries} - Using genai.upload_file()")
+                logger.info(f"Upload attempt {attempt + 1}/{retries} - Using genai.upload_file()")
                 
                 if hasattr(genai, 'upload_file'):
                     video_file = genai.upload_file(path=file_path)
@@ -331,26 +335,26 @@ class LLMWrapper:
                     with open(file_path, 'rb') as f:
                         video_file = File.create(file=f, mime_type='video/mp4')
                 
-                print(f"   ✅ Upload successful! File name: {video_file.name}")
+                logger.info(f"Upload successful! File name: {video_file.name}")
                 
                 # Wait for processing
-                print(f"   ⏳ Waiting for processing...")
+                logger.info(f"Waiting for processing...")
                 max_wait = 300
                 wait_time = 0
                 
                 while video_file.state.name == "PROCESSING":
                     if wait_time >= max_wait:
                         error_msg = f"Processing timeout after {max_wait}s"
-                        print(f"   ⚠️ {error_msg}")
+                        logger.warning(error_msg)
                         break
                     
                     time.sleep(5)
                     wait_time += 5
                     video_file = genai.get_file(video_file.name)
-                    print(f"   Processing... ({wait_time}s elapsed, state: {video_file.state.name})")
+                    logger.debug(f"Processing... ({wait_time}s elapsed, state: {video_file.state.name})")
                 
                 if video_file.state.name == "ACTIVE":
-                    print(f"   ✅ Video ready for analysis!")
+                    logger.info(f"Video ready for analysis!")
                     success = True
                     
                     # Log successful upload
@@ -372,16 +376,16 @@ class LLMWrapper:
                     return video_file, "gemini"
                 else:
                     error_msg = f"Processing failed with state: {video_file.state.name}"
-                    print(f"   ❌ {error_msg}")
+                    logger.error(error_msg)
                     
             except Exception as e:
                 error_msg = str(e)
-                print(f"   ❌ Upload attempt {attempt + 1}/{retries} failed: {e}")
+                logger.exception(f"Upload attempt {attempt + 1}/{retries} failed")
                 if attempt < retries - 1:
-                    print(f"   ⏳ Retrying in {delay} seconds...")
+                    logger.info(f"Retrying in {delay} seconds...")
                     time.sleep(delay)
                 else:
-                    print(f"   ❌ All upload attempts failed")
+                    logger.error("All upload attempts failed")
         
         # Log failed upload
         elapsed_ms = int((time.time() - start_time) * 1000)
@@ -448,7 +452,7 @@ class LLMWrapper:
                 # Try Gemini
                 for attempt in range(retries):
                     try:
-                        print(f"🤖 Generating text with Gemini [{self.gemini_model_name}] (attempt {attempt + 1}/{retries})")
+                        logger.info(f"Generating text with Gemini [{self.gemini_model_name}] (attempt {attempt + 1}/{retries})")
                         response = self.gemini_model.generate_content(prompt)
                         
                         elapsed_ms = int((time.time() - start_time) * 1000)
@@ -472,21 +476,21 @@ class LLMWrapper:
                         # Track last used model info
                         self.last_used_provider = provider_used
                         self.last_used_model = model_used
-                        print(f"   ✅ Success with {provider_used.upper()} [{model_used}]!")
+                        logger.info(f"Success with {provider_used.upper()} [{model_used}]!")
                         return response.text
                         
                     except Exception as e:
                         error_msg = str(e)
-                        print(f"   ❌ Gemini failed: {e}")
+                        logger.exception(f"Gemini attempt {attempt + 1}/{retries} failed")
                         if attempt < retries - 1:
                             time.sleep(2)
                         else:
-                            print("   ⚠️ Switching to fallback provider...")
+                            logger.warning("Switching to fallback provider...")
             
             elif provider == "claude":
                 # Try Claude
                 try:
-                    print(f"🤖 Generating text with Claude [{self.claude_model_name}]...")
+                    logger.info(f"Generating text with Claude [{self.claude_model_name}]...")
                     
                     message = self.claude_client.messages.create(
                         model=self.claude_model_name,
@@ -518,37 +522,29 @@ class LLMWrapper:
                     # Track last used model info
                     self.last_used_provider = provider_used
                     self.last_used_model = model_used
-                    print(f"   ✅ Success with {provider_used.upper()} [{model_used}]!")
+                    logger.info(f"Success with {provider_used.upper()} [{model_used}]!")
                     return message.content[0].text
                     
                 except Exception as e:
                     error_msg = str(e)
-                    print(f"   ❌ Claude failed: {e}")
-                    if self.fallback_enabled:
-                        print("   ⚠️ Switching to fallback provider...")
+                    logger.exception("Claude generation failed")
+                    logger.warning("Switching to fallback provider...")
             
-            elif provider in ["openai", "ollama"]:
-                # Try OpenAI / Ollama
+            elif provider == "openai":
+                # Try OpenAI
                 try:
-                    provider_name = "OpenAI" if provider == "openai" else "Ollama"
-                    model_name = self.openai_model
-                    print(f"🤖 Generating text with {provider_name} [{model_name}]...")
+                    logger.info(f"Generating text with OpenAI [{self.openai_model}]...")
                     
                     response = self.openai_client.chat.completions.create(
                         model=self.openai_model,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=0.7,
-                        max_tokens=4000
+                        messages=[{"role": "user", "content": prompt}]
                     )
                     
                     elapsed_ms = int((time.time() - start_time) * 1000)
-                    tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else int(estimated_tokens * 2)
-                    provider_used = provider
-                    model_used = model_name
+                    tokens_used = response.usage.total_tokens
+                    provider_used = "openai"
+                    model_used = self.openai_model
                     success = True
-                    
-                    # Calculate cost
-                    cost_credits = 0.0 if provider == "ollama" else 2.0  # Example cost
                     
                     # Log successful request
                     self._log_request(
@@ -556,7 +552,7 @@ class LLMWrapper:
                         provider=provider_used,
                         operation_type="text_generation",
                         tokens_used=tokens_used,
-                        cost_credits=cost_credits,
+                        cost_credits=0.0, # Will be calculated by logger
                         response_time_ms=elapsed_ms,
                         success=True,
                         metadata={'prompt_length': len(prompt), 'model': model_used}
@@ -565,14 +561,57 @@ class LLMWrapper:
                     # Track last used model info
                     self.last_used_provider = provider_used
                     self.last_used_model = model_used
-                    print(f"   ✅ Success with {provider_name} [{model_used}]!")
+                    logger.info(f"Success with {provider_used.upper()} [{model_used}]!")
                     return response.choices[0].message.content
                     
                 except Exception as e:
                     error_msg = str(e)
-                    print(f"   ❌ {provider_name} failed: {e}")
-
-        # Log failure
+                    logger.exception("OpenAI generation failed")
+                    logger.warning("Switching to fallback provider...")
+                    
+            elif provider == "ollama":
+                # Try Ollama
+                try:
+                    logger.info(f"Generating text with Ollama [{self.openai_model}]...")
+                    
+                    response = self.openai_client.chat.completions.create(
+                        model=self.openai_model,
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                    
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    tokens_used = int(estimated_tokens + len(response.choices[0].message.content.split()) * 1.3)
+                    provider_used = "ollama"
+                    model_used = self.openai_model
+                    success = True
+                    
+                    # Log successful request
+                    self._log_request(
+                        endpoint="/generate_text",
+                        provider=provider_used,
+                        operation_type="text_generation",
+                        tokens_used=tokens_used,
+                        cost_credits=0.0,
+                        response_time_ms=elapsed_ms,
+                        success=True,
+                        metadata={'prompt_length': len(prompt), 'model': model_used}
+                    )
+                    
+                    # Track last used model info
+                    self.last_used_provider = provider_used
+                    self.last_used_model = model_used
+                    logger.info(f"Success with {provider_used.upper()} [{model_used}]!")
+                    return response.choices[0].message.content
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    logger.exception("Ollama generation failed")
+                    logger.warning("Switching to fallback provider...")
+        
+        # If we get here, all providers failed
+        logger.error("All AI providers failed to generate text")
+        
+        # Log final failure
         elapsed_ms = int((time.time() - start_time) * 1000)
         self._log_request(
             endpoint="/generate_text",
@@ -582,12 +621,11 @@ class LLMWrapper:
             cost_credits=0.0,
             response_time_ms=elapsed_ms,
             success=False,
-            error_message=error_msg or "All providers failed",
+            error_message=error_msg,
             metadata={'prompt_length': len(prompt)}
         )
         
-        print("❌ All AI providers failed")
-        return "⚠️ All AI providers are currently unavailable. Please check your API keys and internet connection, or try again later."
+        return f"❌ Error: All AI providers failed. Last error: {error_msg}"
 
     def analyze_video(self, video_file_obj, prompt, retries=3, enable_grounding=True, user_id="default_user"):
         """
@@ -618,7 +656,7 @@ class LLMWrapper:
         if self.gemini_model and video_file_obj:
             for attempt in range(retries):
                 try:
-                    print(f"🤖 Analyzing video with Gemini [{self.gemini_model_name}] (attempt {attempt + 1}/{retries})")
+                    logger.info(f"Analyzing video with Gemini [{self.gemini_model_name}] (attempt {attempt + 1}/{retries})")
                     
                     # Add grounding instructions if enabled
                     enhanced_prompt = prompt
@@ -662,7 +700,7 @@ FACT-GROUNDING REQUIREMENT:
                     # Track last used model info
                     self.last_used_provider = "gemini"
                     self.last_used_model = self.gemini_model_name
-                    print(f"   ✅ Analysis complete with GEMINI [{self.gemini_model_name}]!")
+                    logger.info(f"Analysis complete with GEMINI [{self.gemini_model_name}]!")
                     
                     # Parse response
                     parsed_results = self._parse_response(response.text)
@@ -673,20 +711,21 @@ FACT-GROUNDING REQUIREMENT:
                         'model': self.gemini_model_name
                     }
                     
+                    # --- ISSUE #42: Fact-Grounding Integration ---
                     # Apply fact-grounding validation if enabled
                     if enable_grounding and GROUNDING_AVAILABLE and parsed_results.get('captions'):
-                        print(f"   🔍 Validating claims against transcript...")
+                        logger.info("Validating claims against transcript...")
                         parsed_results = self._apply_fact_grounding(parsed_results)
                     
                     return parsed_results
                     
                 except Exception as e:
                     error_msg = str(e)
-                    print(f"   ❌ Analysis attempt {attempt + 1}/{retries} failed: {e}")
+                    logger.error(f"Analysis attempt {attempt + 1}/{retries} failed: {e}")
                     if attempt < retries - 1:
                         time.sleep(5)
                     else:
-                        print("   ❌ All analysis attempts failed")
+                        logger.error("All analysis attempts failed")
         
         # 2. Log failure and return mock
         elapsed_ms = int((time.time() - start_time) * 1000)
@@ -703,7 +742,7 @@ FACT-GROUNDING REQUIREMENT:
         )
         
         if self.fallback_enabled:
-            print("⚠️ Using mock analysis response (video analysis requires Gemini)")
+            logger.warning("Using mock analysis response (video analysis requires Gemini API key)")
             mock_result = self._generate_mock_analysis()
             mock_result['model_info'] = {'provider': 'mock', 'model': 'fallback'}
             return mock_result
@@ -784,7 +823,7 @@ FACT-GROUNDING REQUIREMENT:
         try:
             srt_content = parsed_results.get('captions', '')
             if not srt_content:
-                print("   ⚠️ No transcript available for grounding")
+                logger.warning("No transcript available for grounding")
                 return parsed_results
             
             grounder = FactGrounder(srt_content)
@@ -795,7 +834,7 @@ FACT-GROUNDING REQUIREMENT:
                 filtered_blog = grounding_report['filtered_content']['blog_post']
                 
                 if len(filtered_blog) < len(original_blog) * 0.5:
-                    print(f"   ⚠️ Blog post heavily filtered ({len(filtered_blog)}/{len(original_blog)} chars)")
+                    logger.warning(f"Blog post heavily filtered during grounding ({len(filtered_blog)}/{len(original_blog)} chars)")
                 
                 parsed_results['blog_post'] = filtered_blog
                 parsed_results['blog_post_original'] = original_blog
@@ -825,16 +864,12 @@ FACT-GROUNDING REQUIREMENT:
             }
             
             stats = grounding_report['statistics']
-            print(f"   📊 Grounding Stats:")
-            print(f"      Blog: {stats.get('blog_grounding_rate', 0):.1%} claims verified")
-            print(f"      Social: {stats.get('social_grounding_rate', 0):.1%} claims verified")
-            print(f"      Shorts: {stats.get('shorts_verification_rate', 0):.1%} ideas verified")
-            
-            return parsed_results
-            
+            logger.info("Fact-grounding stats: " + 
+                        f"Blog: {stats.get('blog_grounding_rate', 0):.1%} verified, " +
+                        f"Social: {stats.get('social_grounding_rate', 0):.1%} verified, " +
+                        f"Shorts: {stats.get('shorts_verification_rate', 0):.1%} verified")
         except Exception as e:
-            print(f"   ⚠️ Fact-grounding validation failed: {e}")
-            return parsed_results
+            logger.error(f"Fact-grounding validation failed: {e}")
 
     def _generate_mock_analysis(self):
         """Generates a realistic mock response when API is unavailable."""
@@ -942,7 +977,7 @@ Your video upload to the Gemini API failed. This is typically caused by configur
 
             return json.loads(cleaned)
         except (json.JSONDecodeError, ValueError, IndexError, AttributeError) as e:
-            print(f"⚠️ Failed to extract JSON from response: {e}")
+            logger.warning(f"Failed to extract JSON from response: {e}")
             return {}
     
     def get_last_used_display(self):

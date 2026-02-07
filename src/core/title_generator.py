@@ -4,8 +4,12 @@ Generates catchy, engaging titles for videos and shorts using AI.
 """
 
 import re
+import logging
 from typing import List, Dict, Optional
 from dataclasses import dataclass
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -220,8 +224,10 @@ Generate {num_titles} titles now:"""
             response = self.llm_wrapper.generate_text(prompt)
             return self._parse_ai_titles(response, num_titles)
         except Exception as e:
-            print(f"AI title generation failed: {e}, falling back to formulaic")
-            return self._generate_titles_formulaic(content[:50], num_titles)
+            logger.error(f"AI title generation failed: {e}, falling back to formulaic")
+            # Use the first 50 chars of content as the topic for fallback
+            topic = content[:50].split('\n')[0]
+            return self._generate_titles_formulaic(topic, num_titles)
     
     def _parse_ai_titles(self, response: str, expected_count: int) -> List[TitleSuggestion]:
         """Parse AI-generated titles from response."""

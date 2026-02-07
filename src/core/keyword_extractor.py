@@ -6,7 +6,11 @@ Uses LLM-based approach with optional NLP fallback.
 
 import json
 import re
+import logging
 from typing import List, Optional, Dict
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 try:
     from src.core.llm_wrapper import LLMWrapper
@@ -30,7 +34,7 @@ class KeywordExtractor:
             try:
                 self.llm_client = LLMWrapper()
             except Exception as e:
-                print(f"⚠️ LLM initialization failed for keyword extraction: {e}")
+                logger.warning(f"LLM initialization failed for keyword extraction: {e}")
 
     def extract_keywords(
         self, text: str, num_keywords: int = 8, content_type: str = "general"
@@ -125,9 +129,11 @@ Respond with ONLY the JSON array:"""
                                 seen.add(kw)
                         return unique[:num_keywords]
                 except (json.JSONDecodeError, ValueError, TypeError) as e:
-                    print(f"⚠️ Failed to parse LLM response: {e}")
+                    logger.warning(f"Failed to parse LLM response for keywords: {e}")
+                    return None
         except Exception as e:
-            print(f"⚠️ LLM keyword extraction failed: {e}")
+            logger.error(f"LLM keyword extraction failed: {e}")
+            return None
 
         return None
 

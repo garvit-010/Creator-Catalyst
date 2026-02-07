@@ -15,6 +15,11 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT_DIR))
 
+# Initialize logging
+from src.utils.logger import setup_logging, get_logger
+setup_logging()
+logger = get_logger(__name__)
+
 # Import the wrapper and storage
 from src.core.llm_wrapper import LLMWrapper
 from src.database.storage_manager import get_storage_manager
@@ -505,7 +510,7 @@ def compress_video_if_needed(video_path, threshold_mb=50):
         
     except Exception as e:
         # If ffmpeg fails, log it but don't crash the app—just use original
-        print(f"⚠️ Compression failed: {e}")
+        logger.error(f"Compression failed: {e}")
         return video_path, False
 
 def process_video_with_progress(uploaded_file, video_path, target_platform="General", enable_grounding=True):

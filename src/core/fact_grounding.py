@@ -5,11 +5,15 @@ Refactored for Issue #52: Uses Vector-Based RAG (Semantic Search).
 """
 
 import re
+import logging
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
 from sentence_transformers import SentenceTransformer, util
 import torch
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TranscriptSegment:
@@ -55,7 +59,7 @@ class FactGrounder:
         # Initialize Embedding Model (Lazy loading)
         if FactGrounder._model is None:
             # 'all-MiniLM-L6-v2' is fast and effective for semantic search
-            print("Loading Fact-Grounding Embedding Model...")
+            logger.info("Loading Fact-Grounding Embedding Model...")
             FactGrounder._model = SentenceTransformer('all-MiniLM-L6-v2')
             
         self.model = FactGrounder._model

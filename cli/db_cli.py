@@ -16,6 +16,11 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Initialize logging
+from src.utils.logger import setup_logging, get_logger
+setup_logging()
+logger = get_logger(__name__)
+
 # Import application modules
 from src.database.credits_manager import get_credits_manager
 from src.database.database import get_database, Database
@@ -25,7 +30,7 @@ from src.database.storage_manager import get_storage_manager
 def cmd_init(args):
     """Initialize database."""
     db = get_database(args.database)
-    print(f"✅ Database initialized at: {args.database}")
+    logger.info(f"Database initialized at: {args.database}")
 
 
 def cmd_stats(args):
@@ -79,7 +84,7 @@ def cmd_show(args):
     results = storage.load_video_results(args.video_id)
     
     if not results:
-        print(f"❌ Video {args.video_id} not found")
+        logger.error(f"Video {args.video_id} not found")
         return
     
     video = results['video']
@@ -125,7 +130,7 @@ def cmd_export(args):
     
     output_path = args.output or f"export_video_{args.video_id}.json"
     storage.export_video_results(args.video_id, output_path)
-    print(f"✅ Exported to: {output_path}")
+    logger.info(f"Exported to: {output_path}")
 
 
 def cmd_import(args):
@@ -133,7 +138,7 @@ def cmd_import(args):
     storage = get_storage_manager(args.database)
     
     video_id = storage.import_video_results(args.json_file)
-    print(f"✅ Imported with video ID: {video_id}")
+    logger.info(f"Imported with video ID: {video_id}")
 
 
 def cmd_delete(args):
@@ -147,7 +152,7 @@ def cmd_delete(args):
             return
     
     storage.delete_video_and_content(args.video_id)
-    print(f"✅ Video {args.video_id} deleted")
+    logger.info(f"Video {args.video_id} deleted")
 
 
 def cmd_search(args):
