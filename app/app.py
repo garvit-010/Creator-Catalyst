@@ -6,6 +6,7 @@ import re
 import tempfile
 import sys
 import subprocess
+import json
 from PIL import Image
 from huggingface_hub import InferenceClient
 from datetime import datetime
@@ -44,6 +45,10 @@ from src.ui.components.title_ui import (
 )
 # [NEW] Import Audio Generator
 from src.core.audio_generator import generate_audio_file, AVAILABLE_VOICES
+
+# [NEW] File to store custom user personas
+PERSONAS_FILE = "user_personas.json"
+
 from src.core.sentiment_analyzer import SentimentAnalyzer
 
 def render_credits_page(credits_manager):
@@ -350,6 +355,57 @@ PLATFORM_TONES = {
         "style_guide": "Use very short, snappy language. Be extremely casual and relatable. Reference trends, use internet slang appropriately, and create immediate hooks. Focus on entertainment value and quick pacing."
     }
 }
+
+# [NEW] Track default platforms so we don't allow deleting them
+DEFAULT_PLATFORMS = list(PLATFORM_TONES.keys())
+
+# [NEW] Helper functions for Custom Personas
+def load_custom_personas():
+    """Loads custom personas from JSON and updates the global PLATFORM_TONES."""
+    if os.path.exists(PERSONAS_FILE):
+        try:
+            with open(PERSONAS_FILE, "r") as f:
+                custom_personas = json.load(f)
+                PLATFORM_TONES.update(custom_personas)
+        except Exception as e:
+            st.error(f"Failed to load custom personas: {e}")
+
+def save_custom_persona(name, description, style_guide):
+    """Saves a new persona to the JSON file."""
+    # 1. Load existing
+    current_customs = {}
+    if os.path.exists(PERSONAS_FILE):
+        with open(PERSONAS_FILE, "r") as f:
+            current_customs = json.load(f)
+    
+    # 2. Add new
+    current_customs[name] = {
+        "description": description,
+        "style_guide": style_guide
+    }
+    
+    # 3. Save
+    with open(PERSONAS_FILE, "w") as f:
+        json.dump(current_customs, f, indent=4)
+    
+    return True
+
+def delete_custom_persona(name):
+    """Deletes a custom persona from the JSON file."""
+    if os.path.exists(PERSONAS_FILE):
+        with open(PERSONAS_FILE, "r") as f:
+            current_customs = json.load(f)
+        
+        if name in current_customs:
+            del current_customs[name]
+            
+            with open(PERSONAS_FILE, "w") as f:
+                json.dump(current_customs, f, indent=4)
+            return True
+    return False
+
+# [NEW] Execute load immediately so they appear in dropdowns
+load_custom_personas()
 
 # --- Helper Functions ---
 
@@ -686,6 +742,71 @@ def pil_to_bytes(image):
     return buf.getvalue()
 
 # --- Page Definitions ---
+
+def settings_page():
+    """Renders the Settings & Persona Editor page."""
+    st.title("⚙️ Settings & Personas")
+    st.markdown("Manage your AI personas and system prompts.")
+    
+    tab1, tab2 = st.tabs(["🎭 Persona Editor", "🔧 App Config"])
+    
+    # TAB 1: Persona Editor
+    with tab1:
+        st.subheader("Custom AI Personas")
+        st.caption("Create custom writing styles (e.g., 'Pirate Mode', 'Corporate Brand', 'Gen Z').")
+        
+        # --- Create New Persona Form ---
+        with st.expander("➕ Create New Persona", expanded=False):
+            with st.form("new_persona_form"):
+                new_name = st.text_input("Persona Name (e.g., 'Tech Influencer')")
+                new_desc = st.text_input("Short Description (e.g., 'Excited, emoji-heavy tech reviews')")
+                new_prompt = st.text_area(
+                    "System Prompt / Style Guide", 
+                    height=150,
+                    placeholder="You are a tech influencer. Use words like 'game-changer' and 'beast'. Keep sentences short. Use 🔥 emojis."
+                )
+                
+                submitted = st.form_submit_button("💾 Save Persona")
+                if submitted:
+                    if new_name and new_prompt:
+                        if new_name in DEFAULT_PLATFORMS:
+                            st.error("❌ Cannot overwrite default platforms.")
+                        else:
+                            save_custom_persona(new_name, new_desc, new_prompt)
+                            st.success(f"✅ Persona '{new_name}' saved!")
+                            time.sleep(1)
+                            st.rerun()
+                    else:
+                        st.error("⚠️ Name and Prompt are required.")
+        
+        st.divider()
+        
+        # --- List Existing Personas ---
+        st.markdown("### 📂 Your Personas")
+        
+        # Filter to show only custom ones (or all if you prefer, but editing defaults is tricky)
+        custom_keys = [k for k in PLATFORM_TONES.keys() if k not in DEFAULT_PLATFORMS]
+        
+        if not custom_keys:
+            st.info("No custom personas created yet.")
+        else:
+            for key in custom_keys:
+                with st.container(border=True):
+                    c1, c2 = st.columns([4, 1])
+                    with c1:
+                        st.subheader(f"🎭 {key}")
+                        st.caption(PLATFORM_TONES[key]["description"])
+                        with st.expander("View System Prompt"):
+                            st.code(PLATFORM_TONES[key]["style_guide"])
+                    with c2:
+                        st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True)
+                        if st.button("🗑️ Delete", key=f"del_{key}", type="primary"):
+                            delete_custom_persona(key)
+                            st.rerun()
+
+    # TAB 2: App Config (Placeholder for future settings)
+    with tab2:
+        st.info("System configuration settings coming soon.")
 
 def home_page():
     """Renders the landing/description page for the app."""
@@ -1559,7 +1680,7 @@ with st.sidebar:
     # Updated navigation with AI Logs option
     page = st.radio(
         "Navigation", 
-        ["Home", "Creator Tool", "History", "Credits", "AI Logs"], 
+        ["Home", "Creator Tool", "History", "Credits", "AI Logs", "Settings"], 
         label_visibility="hidden"
     )
 
@@ -1609,3 +1730,5 @@ elif page == "AI Logs":
     # NEW: AI Logs Dashboard
     from src.ui.pages.ai_logs_dashboard import render_ai_logs_dashboard
     render_ai_logs_dashboard()
+elif page == "Settings":
+    settings_page()
