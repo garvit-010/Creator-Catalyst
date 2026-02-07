@@ -6,11 +6,15 @@ Provides analytics and prevents cost overruns.
 
 import sqlite3
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from contextlib import contextmanager
 from pathlib import Path
 from dataclasses import dataclass
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -136,7 +140,10 @@ class AIRequestLogger:
                 ON rate_limits(user_id, window_start)
             """)
             
-            print(f"✅ AI Request Logger initialized")
+            # Cleanup old logs (over 90 days)
+            self.cleanup_old_logs(90)
+            
+            logger.info("AI Request Logger initialized")
     
     def log_request(
         self,
@@ -456,7 +463,8 @@ class AIRequestLogger:
                 WHERE window_end < ?
             """, (cutoff_date.isoformat(),))
             
-            print(f"✅ Cleaned up {deleted} old log entries")
+            if deleted > 0:
+                logger.info(f"Cleaned up {deleted} old log entries")
             return deleted
 
 

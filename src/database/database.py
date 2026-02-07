@@ -5,11 +5,15 @@ Handles persistence of video analysis results, content generations, and metadata
 
 import sqlite3
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, asdict
 from contextlib import contextmanager
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -141,7 +145,7 @@ class Database:
             try:
                 cursor.execute("SELECT searchable_text FROM videos LIMIT 1")
             except sqlite3.OperationalError:
-                print("⚠️  Migrating database: Adding 'searchable_text' column for Semantic Search...")
+                logger.info("Migrating database: Adding 'searchable_text' column for Semantic Search...")
                 cursor.execute("ALTER TABLE videos ADD COLUMN searchable_text TEXT DEFAULT ''")
             
             # Content outputs table
@@ -188,7 +192,7 @@ class Database:
                 ON videos(uploaded_at DESC)
             """)
             
-            print(f"✅ Database initialized at: {self.db_path}")
+            logger.info(f"Database initialized at: {self.db_path}")
     
     # ==================== VIDEO OPERATIONS ====================
     
@@ -223,7 +227,7 @@ class Database:
             ))
             
             video_id = cursor.lastrowid
-            print(f"✅ Video created: ID={video_id}, filename={video.filename}")
+            logger.info(f"Video created: ID={video_id}, filename={video.filename}")
             return video_id
     
     def get_video(self, video_id: int) -> Optional[Video]:
@@ -305,14 +309,14 @@ class Database:
                 SET processing_status = ? 
                 WHERE id = ?
             """, (status, video_id))
-            print(f"✅ Video {video_id} status updated to: {status}")
+            logger.info(f"Video {video_id} status updated to: {status}")
     
     def delete_video(self, video_id: int):
         """Delete video and all associated content (cascades)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM videos WHERE id = ?", (video_id,))
-            print(f"✅ Video {video_id} deleted (with all associated content)")
+            logger.info(f"Video {video_id} and all associated content deleted")
     
     # ==================== CONTENT OPERATIONS ====================
     
@@ -350,7 +354,7 @@ class Database:
             ))
             
             content_id = cursor.lastrowid
-            print(f"✅ Content saved: ID={content_id}, type={content.content_type}")
+            logger.info(f"Content saved: ID={content_id}, type={content.content_type}")
             return content_id
     
     def get_content(self, content_id: int) -> Optional[ContentOutput]:
@@ -431,9 +435,9 @@ class Database:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM content_outputs WHERE id = ?", (content_id,))
-            print(f"✅ Content {content_id} deleted")
+            logger.info(f"Content {content_id} deleted")
     
-    # ==================== GROUNDING REPORT OPERATIONS ====================
+    # ==================== GROUNDING OPERATIONS ====================
     
     def save_grounding_report(self, report: GroundingReport) -> int:
         """Save a grounding validation report."""
@@ -463,7 +467,7 @@ class Database:
             ))
             
             report_id = cursor.lastrowid
-            print(f"✅ Grounding report saved: ID={report_id}")
+            logger.info(f"Grounding report saved: ID={report_id}")
             return report_id
     
     def get_grounding_report(self, video_id: int) -> Optional[GroundingReport]:

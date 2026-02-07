@@ -6,11 +6,15 @@ import json
 import uuid
 import time
 import nltk
+import logging
 from pathlib import Path
 from src.database.database import Database
 from src.database.storage_manager import StorageManager
 from src.database.credits_manager import CreditsManager
 from src.core.llm_wrapper import LLMWrapper
+
+# Initialize logger for tests
+logger = logging.getLogger(__name__)
 
 # Ensure NLTK data is available
 def pytest_configure(config):
@@ -21,7 +25,7 @@ def pytest_configure(config):
         nltk.download('punkt_tab', quiet=True)
         nltk.download('averaged_perceptron_tagger', quiet=True)
     except Exception as e:
-        print(f"⚠️ Failed to download NLTK data: {e}")
+        logger.warning(f"Failed to download NLTK data: {e}")
 
 @pytest.fixture(autouse=True)
 def reset_singletons():

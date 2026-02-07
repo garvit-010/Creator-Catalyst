@@ -2,6 +2,10 @@ import asyncio
 import edge_tts
 import tempfile
 import os
+import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # Voice mapping for better UI experience
 AVAILABLE_VOICES = {
@@ -45,5 +49,5 @@ def generate_audio_file(text, voice_friendly_name="👨‍💼 Professional (Mal
         
         return output_path
     except Exception as e:
-        print(f"Error generating audio: {e}")
+        logger.error(f"Error generating audio: {e}")
         return None
